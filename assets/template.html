@@ -1079,6 +1079,12 @@ document.addEventListener('keydown',function(e){
   }
 });
 
+/* HTML转义 */
+function escapeHtml(str){
+  var div=document.createElement('div');
+  div.textContent=str;
+  return div.innerHTML;
+}
 /* AI对话：发送指令 */
 function aiChatSend(){
   var input=document.getElementById('ai-chat-input');
