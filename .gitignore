@@ -1,0 +1,23 @@
+# 个人数据（不提交）
+config/ai_config.json
+错题库/*
+!错题库/.gitkeep
+index.html
+server.pid
+
+# 临时文件
+.preview/
+__pycache__/
+*.pyc
+*.tmp
+_chk.js
+_patch_*.py
+_fix_*.py
+_diag_*.py
+_test_*.py
+_verify_*.py
+_add_*.py
+_remove_*.py
+_check_*.py
+_rebuild*.py
+_pack_*.py
