@@ -1,0 +1,48 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # 支持手动触发
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -e
+
+            echo "=== 1. 进入项目目录 ==="
+            cd /opt/sql-wrongbook/app
+
+            echo "=== 2. 拉取最新代码 ==="
+            sudo git pull origin main
+
+            echo "=== 3. 重启应用服务 ==="
+            sudo systemctl restart sql-wrongbook
+
+            echo "=== 4. 等待服务启动 ==="
+            sleep 3
+
+            echo "=== 5. 健康检查 ==="
+            if curl -fsS http://127.0.0.1/api/auth/me > /dev/null 2>&1; then
+              echo "✅ 部署成功，服务正常运行"
+              sudo systemctl --no-pager --full status sql-wrongbook | head -n 8
+            else
+              echo "❌ 部署失败，服务无响应"
+              sudo journalctl -u sql-wrongbook -n 50 --no-pager
+              exit 1
+            fi
+
+            echo "=== 6. 最近提交记录 ==="
+            git log --oneline -3
