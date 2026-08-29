@@ -1,0 +1,76 @@
+# 账号、数据库与同步说明
+
+## 当前实现
+
+- SQLite 是错题、复习计划、复习历史和同步版本的权威数据源。
+- 密码使用 PBKDF2-HMAC-SHA256 加盐保存，不保存明文密码。
+- 登录会话使用随机令牌和 HttpOnly、SameSite=Lax Cookie。
+- 每条错题都属于一个用户；所有读写接口都进行用户归属校验。
+- 第一个注册账号会自动导入 `错题库/` 中现有 Markdown；之后注册的账号从空错题库开始。
+- Markdown 仍会作为本地可迁移备份保留，但网页不再把本地文件内容直接嵌入未登录页面。
+
+默认数据库位于 `data/sql_review.db`，可通过环境变量 `SQL_WRONGBOOK_DB` 指定持久磁盘路径。
+
+## 复习调度
+
+评分分为四档：
+
+- `0` 忘记：次日再次复习，重置连续掌握次数并增加遗忘次数。
+- `1` 模糊：保持短间隔，降低易度。
+- `2` 掌握：按 1 天、3 天和当前易度逐步延长。
+- `3` 轻松：从 4 天起采用更长间隔，并提高易度。
+
+每次评分都会同时写入 `review_events` 历史表，并更新错题的 `next_review_at`、`interval_days`、`ease`、`repetitions`、`lapses` 和 `status`。
+
+## 同步 API
+
+所有同步接口都需要登录会话。
+
+网页使用 HttpOnly Cookie。小程序登录时在 `/api/auth/login` 请求体增加 `"client_type": "mini_program"`，响应会返回 `session_token`；之后通过 `Authorization: Bearer <session_token>` 调用同步接口。
+
+### 拉取增量
+
+`GET /api/sync?since=<cursor>&limit=500`
+
+返回：
+
+- `cursor`：客户端下次拉取时保存的游标。
+- `changes`：错题和复习事件的增量变化。
+- `has_more`：是否需要继续分页拉取。
+- `server_time`：服务端时间。
+
+### 推送离线变化
+
+`POST /api/sync/push`
+
+```json
+{
+  "records": [
+    {
+      "id": "question-uuid",
+      "base_version": 3,
+      "operation": "upsert",
+      "record": {"title": "...", "body_md": "..."}
+    },
+    {
+      "entity_type": "review",
+      "id": "device-generated-event-id",
+      "record": {"question_id": "question-uuid", "rating": 2, "device_id": "mini-program"}
+    }
+  ]
+}
+```
+
+错题更新采用版本号冲突检测：`base_version` 落后时返回服务器版本，客户端不得静默覆盖。复习事件以客户端事件 ID 幂等写入，重复推送不会重复安排复习。
+
+## 部署边界
+
+本地默认只监听 `127.0.0.1`。部署到云服务器时可设置：
+
+- `HOST=0.0.0.0`
+- `PORT=<平台分配端口>`
+- `SQL_WRONGBOOK_DB=<持久磁盘上的数据库路径>`
+
+公网部署必须放在 HTTPS 反向代理之后，并为数据库目录配置定期备份。AI Key 由首个管理员账号统一配置，普通账号不能修改站点级模型配置。
+
+当前同步覆盖错题正文、结构化字段、调度状态和复习历史。原始截图仍保存在服务器文件系统；正式多实例部署时应迁移到对象存储，再给小程序提供鉴权下载地址。

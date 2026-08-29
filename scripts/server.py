@@ -24,6 +24,11 @@ import atexit
 import subprocess
 import urllib.request
 import urllib.error
+from http import cookies
+from urllib.parse import parse_qs, unquote, urlparse
+
+import rebuild_index as indexer
+import storage
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(SCRIPT_DIR)            # 项目根目录（本脚本位于根目录/scripts 下）
@@ -32,6 +37,7 @@ QUIZ_DIR = os.path.join(ROOT, "错题库")
 PID_FILE = os.path.join(ROOT, "server.pid")
 REBUILD_SCRIPT = os.path.join(SCRIPT_DIR, "rebuild_index.py")
 PORT = int(os.environ.get("PORT", "8765"))
+HOST = os.environ.get("HOST", "127.0.0.1")
 DEFAULT_BASE = "https://ark.cn-beijing.volces.com/api/v3"
 
 CLS_SYSTEM_PROMPT = """你是 SQL 错题归档助手。用户会粘贴一道错题的原始信息（题目描述、他写的 SQL、报错信息、讲解等），也可能附带错题截图。
@@ -270,8 +276,18 @@ def _call_llm(messages, temperature=0.3, retries=3, base_delay=2.0, max_tokens=N
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
+    PRIVATE_PREFIXES = ("/config", "/data", "/scripts", "/tests", "/错题库", "/.git")
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=ROOT, **kwargs)
+
+    def send_head(self):
+        request_path = unquote(urlparse(self.path).path).replace("\\", "/")
+        if any(request_path == prefix or request_path.startswith(prefix + "/")
+               for prefix in self.PRIVATE_PREFIXES):
+            self.send_error(404, "Not found")
+            return None
+        return super().send_head()
 
     # ---- 基础工具 ----
     def _send_json(self, code, obj):
@@ -283,6 +299,69 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _session_token(self):
+        auth = self.headers.get("Authorization", "")
+        if auth.lower().startswith("bearer "):
+            return auth[7:].strip()
+        jar = cookies.SimpleCookie()
+        try:
+            jar.load(self.headers.get("Cookie", ""))
+        except cookies.CookieError:
+            return ""
+        morsel = jar.get("sqlwb_session")
+        return morsel.value if morsel else ""
+
+    def _current_user(self):
+        return storage.user_for_session(self._session_token())
+
+    def _require_user(self):
+        user = self._current_user()
+        if not user:
+            self._send_json(401, {"error": "AUTH_REQUIRED", "message": "请先登录。"})
+            return None
+        self.user = user
+        return user
+
+    def _set_session_cookie(self, token):
+        secure = self.headers.get("X-Forwarded-Proto", "").lower() == "https"
+        value = "sqlwb_session=%s; Path=/; HttpOnly; SameSite=Lax; Max-Age=%d" % (
+            token, storage.SESSION_DAYS * 86400)
+        if secure:
+            value += "; Secure"
+        self.send_header("Set-Cookie", value)
+
+    def _clear_session_cookie(self):
+        self.send_header("Set-Cookie", "sqlwb_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")
+
+    def _send_auth(self, code, obj, token=None, clear=False):
+        body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        if token:
+            self._set_session_cookie(token)
+        if clear:
+            self._clear_session_cookie()
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _question_payload(self, question):
+        item = dict(question)
+        sections = indexer.split_sections(item.get("body_md") or "")
+        prompt_parts, answer_parts, all_parts = [], [], []
+        for title, content in sections:
+            block = "<h4>%s</h4>%s" % (indexer.html_mod.escape(title), indexer.render_block(content))
+            all_parts.append(block)
+            if title.strip() == "题目":
+                prompt_parts.append(block)
+            else:
+                answer_parts.append(block)
+        item["prompt_html"] = "".join(prompt_parts) or "<p>暂无题目描述。</p>"
+        item["answer_html"] = "".join(answer_parts) or "<p>暂无解析。</p>"
+        item["body_html"] = "".join(all_parts)
+        return item
+
     def _read_body(self):
         length = int(self.headers.get("Content-Length", 0) or 0)
         raw = self.rfile.read(length) if length else b"{}"
@@ -291,20 +370,83 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         except Exception:
             return {}
 
+    def _track_event(self, event_type, page="", metadata=None):
+        try:
+            user = getattr(self, "user", None) or self._current_user()
+            user_id = user["id"] if user else None
+            device_id = self.headers.get("X-Device-Id", "")[:80]
+            ip = self.headers.get("X-Forwarded-For", self.client_address[0] if self.client_address else "")
+            if "," in ip:
+                ip = ip.split(",")[0].strip()
+            ua = self.headers.get("User-Agent", "")[:300]
+            storage.record_event(user_id=user_id, device_id=device_id, event_type=event_type,
+                                 page=page, metadata=metadata, ip=ip, user_agent=ua)
+        except Exception:
+            pass
+
     def log_message(self, fmt, *args):
         sys.stdout.write("[server] " + fmt % args + "\n")
 
     # ---- 路由 ----
     def do_GET(self):
         path = self.path.split("?")[0]
+        if path == "/":
+            self._track_event("page_view", page="/")
+        if path == "/api/auth/me":
+            user = self._current_user()
+            return self._send_json(200, {"authenticated": bool(user), "user": user})
+        if path.startswith("/api/") and not self._require_user():
+            return
+        if path == "/api/questions":
+            return self._send_json(200, {"questions": [self._question_payload(q) for q in storage.list_questions(self.user["id"])]})
+        if path == "/api/review/today":
+            args = parse_qs(urlparse(self.path).query)
+            due, stats = storage.due_questions(self.user["id"], args.get("limit", [20])[0])
+            return self._send_json(200, {"questions": [self._question_payload(q) for q in due], "stats": stats})
+        if path == "/api/review/history":
+            args = parse_qs(urlparse(self.path).query)
+            return self._send_json(200, {"reviews": storage.review_history(self.user["id"], args.get("limit", [100])[0])})
+        if path == "/api/sync":
+            args = parse_qs(urlparse(self.path).query)
+            return self._send_json(200, storage.sync_pull(self.user["id"], args.get("since", [0])[0], args.get("limit", [500])[0]))
         if path == "/api/config":
             return self._get_config()
         if path == "/api/get_quiz":
             return self._get_quiz()
+        if path == "/api/analytics/summary":
+            return self._analytics_summary()
+        if path == "/api/analytics/daily":
+            return self._analytics_daily()
+        if path == "/api/analytics/retention":
+            return self._analytics_retention()
+        if path == "/api/analytics/funnel":
+            return self._analytics_funnel()
+        if path == "/api/analytics/events":
+            return self._analytics_events()
+        if path == "/api/analytics/ai_usage":
+            return self._analytics_ai_usage()
         return super().do_GET()
 
     def do_POST(self):
         path = self.path.split("?")[0]
+        origin = self.headers.get("Origin", "")
+        if origin and urlparse(origin).netloc != self.headers.get("Host", ""):
+            return self._send_json(403, {"error": "ORIGIN_REJECTED", "message": "拒绝跨站写入请求。"})
+        if path == "/api/auth/register":
+            return self._register()
+        if path == "/api/auth/login":
+            return self._login()
+        if path == "/api/auth/logout":
+            return self._logout()
+        if path.startswith("/api/") and not self._require_user():
+            return
+        if path == "/api/review":
+            return self._record_review()
+        if path == "/api/sync/push":
+            body = self._read_body()
+            return self._send_json(200, storage.sync_push(self.user["id"], body.get("records") or []))
+        if path in {"/api/config", "/api/test"} and not self.user.get("is_admin"):
+            return self._send_json(403, {"error": "ADMIN_REQUIRED", "message": "只有站点管理员可以修改 AI 配置。"})
         if path == "/api/config":
             return self._save_config()
         if path == "/api/chat":
@@ -325,10 +467,58 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._ai_revise()
         self._send_json(404, {"error": "NOT_FOUND", "message": "未知接口"})
 
+    # ---- 账号与复习 ----
+    def _register(self):
+        body = self._read_body()
+        try:
+            user = storage.register_user(body.get("username"), body.get("password"))
+            token = storage.create_session(user["id"])
+            response = {"ok": True, "user": {"id": user["id"], "username": user["username"], "is_admin": user["is_admin"]},
+                        "imported": user["imported"]}
+            if body.get("client_type") == "mini_program":
+                response["session_token"] = token
+            self._send_auth(201, response, token=token)
+            self._track_event("register", metadata={"username": body.get("username", "")[:50], "imported": user.get("imported", 0)})
+        except ValueError as exc:
+            self._send_json(400, {"error": "REGISTER_FAILED", "message": str(exc)})
+
+    def _login(self):
+        body = self._read_body()
+        user = storage.authenticate(body.get("username"), body.get("password"))
+        if not user:
+            return self._send_json(401, {"error": "LOGIN_FAILED", "message": "账号或密码不正确。"})
+        token = storage.create_session(user["id"])
+        response = {"ok": True, "user": user}
+        if body.get("client_type") == "mini_program":
+            response["session_token"] = token
+        self._send_auth(200, response, token=token)
+        self._track_event("login", metadata={"username": body.get("username", "")[:50]})
+
+    def _logout(self):
+        self._track_event("logout")
+        storage.delete_session(self._session_token())
+        self._send_auth(200, {"ok": True}, clear=True)
+
+    def _record_review(self):
+        body = self._read_body()
+        try:
+            result = storage.record_review(
+                self.user["id"], str(body.get("question_id") or ""), body.get("rating"), body.get("device_id")
+            )
+            self._send_json(200, {"ok": True, "schedule": result})
+            self._track_event("review", metadata={"question_id": str(body.get("question_id", ""))[:36], "rating": body.get("rating")})
+        except (KeyError, ValueError) as exc:
+            self._send_json(400, {"error": "REVIEW_FAILED", "message": str(exc)})
+
     # ---- 配置 ----
     def _get_config(self):
         cfg = load_config()
         key = cfg.get("api_key", "")
+        if not self.user.get("is_admin"):
+            return self._send_json(200, {
+                "base_url": "", "model": cfg.get("model"), "configured": bool(key),
+                "api_key_tail": "", "presets": [], "admin": False,
+            })
         plist = []
         for name, p in load_presets().items():
             pkey = str(p.get("api_key") or "")
@@ -345,6 +535,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "configured": bool(key),
             "api_key_tail": key[-4:] if key else "",
             "presets": plist,
+            "admin": True,
         })
 
     def _save_config(self):
@@ -399,84 +590,31 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     # ---- 删除错题 ----
     def _delete_question(self):
         body = self._read_body()
-        rel = (body.get("file") or "").strip()
-        if not rel:
-            return self._send_json(400, {"error": "NO_FILE", "message": "缺少文件路径。"})
-        # 安全校验：必须在错题库目录下，且是 .md 文件
-        fp = os.path.normpath(os.path.join(ROOT, rel))
-        if not fp.startswith(os.path.normpath(os.path.join(ROOT, "错题库"))):
-            return self._send_json(400, {"error": "INVALID_PATH", "message": "文件路径不合法。"})
-        if not fp.lower().endswith(".md"):
-            return self._send_json(400, {"error": "NOT_MD", "message": "只能删除 .md 错题文件。"})
-        if not os.path.isfile(fp):
-            return self._send_json(404, {"error": "NOT_FOUND", "message": "文件不存在。"})
-        # 提取题号，查找关联截图
-        import re as _re
-        no = ""
+        question_id = str(body.get("file") or body.get("id") or "").strip()
+        if not question_id:
+            return self._send_json(400, {"error": "NO_ID", "message": "缺少错题 ID。"})
         try:
-            with open(fp, encoding="utf-8") as f:
-                head = f.read(2000)
-            mm = _re.search(r"题号\s*[:：]\s*(.+)", head)
-            if mm:
-                no = mm.group(1).strip()
-        except Exception:
-            pass
-        deleted = [os.path.basename(fp)]
-        os.remove(fp)
-        # 删除关联截图：同目录或上级目录中文件名含题号的图片
-        if no:
-            search_dirs = [os.path.dirname(fp)]
-            parent = os.path.dirname(os.path.dirname(fp))
-            if parent not in search_dirs:
-                search_dirs.append(parent)
-            for sd in search_dirs:
-                if not os.path.isdir(sd):
-                    continue
-                for fn in os.listdir(sd):
-                    if no in fn and fn.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
-                        try:
-                            os.remove(os.path.join(sd, fn))
-                            deleted.append(fn)
-                        except Exception:
-                            pass
-        # 重建索引
-        try:
-            _rebuild()
-        except Exception as e:
-            return self._send_json(500, {"error": "REBUILD_FAIL", "message": "删除成功但重建索引失败: %s" % e})
-        return self._send_json(200, {"ok": True, "deleted": deleted})
+            version = storage.soft_delete_question(self.user["id"], question_id)
+        except KeyError:
+            return self._send_json(404, {"error": "NOT_FOUND", "message": "错题不存在。"})
+        self._track_event("delete_question", metadata={"question_id": question_id[:36]})
+        return self._send_json(200, {"ok": True, "deleted": [question_id], "version": version})
 
     # ---- 更新复习状态 ----
     def _update_status(self):
         body = self._read_body()
-        rel = (body.get("file") or "").strip()
+        question_id = str(body.get("file") or body.get("id") or "").strip()
         status = (body.get("status") or "").strip()
         valid = {"未掌握", "复习中", "已掌握"}
-        if not rel:
-            return self._send_json(400, {"error": "NO_FILE", "message": "缺少文件路径。"})
+        if not question_id:
+            return self._send_json(400, {"error": "NO_ID", "message": "缺少错题 ID。"})
         if status not in valid:
             return self._send_json(400, {"error": "INVALID_STATUS", "message": "状态只能是 未掌握/复习中/已掌握。"})
-        fp = os.path.normpath(os.path.join(ROOT, rel))
-        if not fp.startswith(os.path.normpath(os.path.join(ROOT, "错题库"))):
-            return self._send_json(400, {"error": "INVALID_PATH", "message": "文件路径不合法。"})
-        if not os.path.isfile(fp):
-            return self._send_json(404, {"error": "NOT_FOUND", "message": "文件不存在。"})
-        import re as _re
-        with open(fp, encoding="utf-8") as f:
-            content = f.read()
-        # 更新 frontmatter 中的状态字段
-        if _re.search(r"^状态\s*[:：]", content, _re.M):
-            content = _re.sub(r"^(状态\s*[:：])\s*(.*)$", lambda m: m.group(1) + " " + status, content, flags=_re.M)
-        else:
-            # 在 frontmatter 末尾插入状态字段
-            content = _re.sub(r"^(---\s*$)", "状态: " + status + "\n\1", content, count=1, flags=_re.M)
-        with open(fp, "w", encoding="utf-8") as f:
-            f.write(content)
         try:
-            _rebuild()
-        except Exception as e:
-            return self._send_json(500, {"error": "REBUILD_FAIL", "message": "状态更新成功但重建索引失败: %s" % e})
-        return self._send_json(200, {"ok": True, "status": status})
+            version = storage.set_question_status(self.user["id"], question_id, status)
+        except KeyError:
+            return self._send_json(404, {"error": "NOT_FOUND", "message": "错题不存在。"})
+        return self._send_json(200, {"ok": True, "status": status, "version": version})
 
     # ---- 配置测试（不落盘） ----
     def _test_config(self):
@@ -533,6 +671,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         try:
             reply = _call_llm(messages)
             self._send_json(200, {"reply": reply})
+            self._track_event("ai_chat", metadata={"msg_count": len(messages)})
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", "replace")[:500]
             self._send_json(e.code, {"error": "LLM_API_ERROR", "message": f"LLM 返回 {e.code}: {detail}"})
@@ -586,6 +725,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             result.setdefault("summary", "")
             result.setdefault("body_md", "")
             self._send_json(200, {"result": result})
+            self._track_event("ai_classify", metadata={"has_image": bool(image), "cat": result.get("cat", "")[:30]})
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", "replace")[:500]
             self._send_json(e.code, {"error": "LLM_API_ERROR", "message": f"LLM 返回 {e.code}: {detail}"})
@@ -594,63 +734,50 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     # ---- 获取错题详情（用于编辑） ----
     def _get_quiz(self):
-        from urllib.parse import urlparse, parse_qs
         qs = parse_qs(urlparse(self.path).query)
-        rel = (qs.get("file", [""])[0] or "").strip()
-        if not rel:
-            return self._send_json(400, {"error": "NO_FILE", "message": "缺少文件路径。"})
-        fp = os.path.normpath(os.path.join(ROOT, rel))
-        if not fp.startswith(os.path.normpath(os.path.join(ROOT, "错题库"))):
-            return self._send_json(400, {"error": "INVALID_PATH", "message": "文件路径不合法。"})
-        if not os.path.isfile(fp):
+        question_id = (qs.get("file", [""])[0] or qs.get("id", [""])[0] or "").strip()
+        if not question_id:
+            return self._send_json(400, {"error": "NO_ID", "message": "缺少错题 ID。"})
+        question = storage.get_question(self.user["id"], question_id)
+        if not question:
             return self._send_json(404, {"error": "NOT_FOUND", "message": "文件不存在。"})
-        with open(fp, encoding="utf-8") as f:
-            content = f.read()
-        meta = {}
-        body = content
-        m = re.match(r"^---\s*\r?\n(.*?)\r?\n---\s*\r?\n", content, re.S)
-        if m:
-            fm = m.group(1)
-            body = content[m.end():]
-            for line in fm.splitlines():
-                mm = re.match(r"^\s*([^:：]+?)\s*[:：]\s*(.*)$", line)
-                if mm:
-                    meta[mm.group(1).strip()] = mm.group(2).strip()
-        return self._send_json(200, {"ok": True, "meta": meta, "body": body})
+        meta = {
+            "题号": question["no"], "标题": question["title"], "知识点": question["cat"],
+            "难度": question["diff"], "日期": question["date"], "来源": question["src"],
+            "错误类型": question["errtype"], "状态": question["status"],
+            "做错次数": str(question["times"]), "重错日期": ", ".join(question["redates"]),
+            "一句话总结": question["summary"],
+        }
+        return self._send_json(200, {"ok": True, "meta": meta, "body": question["body_md"],
+                                     "version": question["version"]})
 
     # ---- 编辑错题（更新元信息和正文） ----
     def _edit_quiz(self):
         body = self._read_body()
-        rel = (body.get("file") or "").strip()
+        question_id = str(body.get("file") or body.get("id") or "").strip()
         meta = body.get("meta") or {}
         new_body = (body.get("body") or "").strip()
-        if not rel:
-            return self._send_json(400, {"error": "NO_FILE", "message": "缺少文件路径。"})
+        if not question_id:
+            return self._send_json(400, {"error": "NO_ID", "message": "缺少错题 ID。"})
         if not new_body:
             return self._send_json(400, {"error": "EMPTY_BODY", "message": "正文不能为空。"})
-        fp = os.path.normpath(os.path.join(ROOT, rel))
-        if not fp.startswith(os.path.normpath(os.path.join(ROOT, "错题库"))):
-            return self._send_json(400, {"error": "INVALID_PATH", "message": "文件路径不合法。"})
-        if not os.path.isfile(fp):
+        current = storage.get_question(self.user["id"], question_id)
+        if not current:
             return self._send_json(404, {"error": "NOT_FOUND", "message": "文件不存在。"})
-        # 构建 frontmatter
-        keys_order = ["题号", "标题", "知识点", "难度", "日期", "来源", "错误类型",
-                      "状态", "做错次数", "重错日期", "一句话总结"]
-        lines = ["---"]
-        for k in keys_order:
-            v = str(meta.get(k, "") or "").strip()
-            lines.append(f"{k}: {v}")
-        lines.append("---")
-        lines.append("")
-        front = "\n".join(lines) + "\n"
-        with open(fp, "w", encoding="utf-8") as f:
-            f.write(front + new_body + "\n")
-        # 重建索引
+        data = {
+            "no": meta.get("题号"), "title": meta.get("标题"), "cat": meta.get("知识点"),
+            "diff": meta.get("难度"), "date": meta.get("日期"), "src": meta.get("来源"),
+            "errtype": meta.get("错误类型"), "status": meta.get("状态"),
+            "times": meta.get("做错次数"), "redates": meta.get("重错日期"),
+            "summary": meta.get("一句话总结"), "body_md": new_body,
+            "next_review_at": current["next_review_at"],
+        }
         try:
-            _rebuild()
-        except Exception as e:
-            return self._send_json(200, {"ok": True, "warning": f"已保存，但重建索引失败: {e}"})
-        return self._send_json(200, {"ok": True})
+            version = storage.update_question(self.user["id"], question_id, data, body.get("version"))
+        except RuntimeError:
+            return self._send_json(409, {"error": "VERSION_CONFLICT", "message": "该错题已在其他设备更新，请刷新后重试。"})
+        self._track_event("edit_question", metadata={"question_id": question_id[:36]})
+        return self._send_json(200, {"ok": True, "version": version})
 
     # ---- AI修正错题（多轮对话，不落盘） ----
     def _ai_revise(self):
@@ -718,12 +845,60 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             for k in ["题号","标题","知识点","难度","日期","来源","错误类型","状态","做错次数","重错日期","一句话总结"]:
                 if not str(new_meta.get(k, "") or "").strip():
                     new_meta[k] = str(meta.get(k, "") or "")
+            self._track_event("ai_revise", metadata={"question_id": str(body.get("file") or body.get("id") or "")[:36]})
             return self._send_json(200, {"ok": True, "reply": reply, "meta": new_meta, "body": new_body})
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", "replace")[:500]
             return self._send_json(e.code, {"error": "LLM_API_ERROR", "message": f"LLM 返回 {e.code}: {detail}"})
         except Exception as e:
             return self._send_json(500, {"error": "REVISE_FAIL", "message": f"AI修正失败: {e}"})
+
+    # ---- 数据分析 API（仅管理员） ----
+    def _require_admin(self):
+        if not self.user.get("is_admin"):
+            self._send_json(403, {"error": "ADMIN_REQUIRED", "message": "只有管理员可以查看数据分析。"})
+            return False
+        return True
+
+    def _analytics_summary(self):
+        if not self._require_admin():
+            return
+        args = parse_qs(urlparse(self.path).query)
+        days = int(args.get("days", [30])[0])
+        self._send_json(200, storage.get_analytics_summary(days))
+
+    def _analytics_daily(self):
+        if not self._require_admin():
+            return
+        args = parse_qs(urlparse(self.path).query)
+        days = int(args.get("days", [30])[0])
+        self._send_json(200, {"daily": storage.get_daily_stats(days)})
+
+    def _analytics_retention(self):
+        if not self._require_admin():
+            return
+        args = parse_qs(urlparse(self.path).query)
+        days = int(args.get("days", [14])[0])
+        self._send_json(200, {"retention": storage.get_retention(days)})
+
+    def _analytics_funnel(self):
+        if not self._require_admin():
+            return
+        self._send_json(200, {"funnel": storage.get_funnel()})
+
+    def _analytics_events(self):
+        if not self._require_admin():
+            return
+        args = parse_qs(urlparse(self.path).query)
+        days = int(args.get("days", [30])[0])
+        self._send_json(200, {"events": storage.get_event_breakdown(days)})
+
+    def _analytics_ai_usage(self):
+        if not self._require_admin():
+            return
+        args = parse_qs(urlparse(self.path).query)
+        days = int(args.get("days", [30])[0])
+        self._send_json(200, {"ai_usage": storage.get_ai_usage(days)})
 
     # ---- 确认入库（写入 md + 重建） ----
     def _save_question(self):
@@ -745,7 +920,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not body_md:
             return self._send_json(400, {"error": "EMPTY_BODY", "message": "正文不能为空。"})
 
-        folder = os.path.join(QUIZ_DIR, cat)
+        if self.user.get("is_admin"):
+            folder = os.path.join(QUIZ_DIR, cat)
+        else:
+            folder = os.path.join(ROOT, "data", "user_content", self.user["id"], cat)
         os.makedirs(folder, exist_ok=True)
         filename = f"{date}_{no}_{title}.md" if date else f"{no}_{title}.md"
         path = _unique_path(folder, filename)
@@ -778,19 +956,31 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 f.write(img_data)
             image_rel = os.path.relpath(img_path, ROOT)
 
+        record = dict(b)
+        record.update({"no": no, "title": title, "cat": cat, "date": date,
+                       "times": times, "redates": redates, "body_md": body_md})
+        question_id = storage.create_question(
+            self.user["id"], record, source_file=os.path.relpath(path, ROOT)
+        )
+        self._track_event("add_question", metadata={"question_id": question_id[:36], "cat": cat[:30], "has_image": bool(image_rel)})
+
         try:
             _rebuild()
         except Exception as e:
             self._send_json(200, {"ok": True, "path": os.path.relpath(path, ROOT),
                                   "image": image_rel,
+                                  "id": question_id,
                                   "warning": f"已写入，但重建索引失败: {e}"})
             return
         self._send_json(200, {"ok": True, "path": os.path.relpath(path, ROOT),
                               "image": image_rel,
+                              "id": question_id,
                               "no": no, "title": title, "cat": cat})
 
 
 def main():
+    storage.init_db()
+    _rebuild()
     try:
         with open(PID_FILE, "w", encoding="utf-8") as f:
             f.write(str(os.getpid()))
@@ -802,14 +992,14 @@ def main():
         save_config({"base_url": DEFAULT_BASE, "api_key": "", "model": ""})
 
     try:
-        httpd = http.server.ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+        httpd = http.server.ThreadingHTTPServer((HOST, PORT), Handler)
     except OSError as e:
         print(f"[错误] 端口 {PORT} 被占用，可能服务已在运行：{e}")
         sys.exit(1)
 
     print("=" * 46)
     print("  SQL 错题本本地服务已启动")
-    print(f"  页面地址：http://127.0.0.1:{PORT}/")
+    print(f"  页面地址：http://{HOST}:{PORT}/")
     print(f"  AI 配置：{CONFIG_FILE}")
     print("  关闭本窗口或双击「停止服务.bat」即可停止")
     print("=" * 46)

@@ -1,0 +1,8 @@
+.git
+__pycache__
+*.pyc
+server.pid
+data
+config/ai_config.json
+错题库/*
+!错题库/.gitkeep

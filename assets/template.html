@@ -222,7 +222,98 @@
   .preset-item .pi-apply{background:var(--brand);color:#fff;border-color:var(--brand);}
   .preset-item .pi-del{color:var(--err);}
 
-  @media (max-width:900px){.layout{flex-direction:column}nav{position:static;width:auto;max-height:none}}
+  .user-area{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12.5px}
+  .user-chip{display:flex;align-items:center;gap:7px;background:var(--brand-soft);color:var(--brand);padding:6px 10px;border-radius:999px;font-weight:600}
+  .sync-dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px rgba(22,163,74,.12)}
+  .text-btn{border:0;background:none;color:var(--muted);cursor:pointer;padding:6px}
+  .review-shell{padding:28px;max-width:980px;margin:0 auto}
+  .review-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:18px}
+  .review-hero h2{font-size:28px;margin:0 0 6px}
+  .review-hero p{margin:0;color:var(--muted)}
+  .review-kpi{background:var(--brand);color:#fff;border-radius:14px;padding:12px 18px;min-width:132px;text-align:center}
+  .review-kpi strong{display:block;font-size:28px;line-height:1.1}
+  .review-kpi span{font-size:12px;opacity:.86}
+  .review-progress{height:8px;background:#e7eaf2;border-radius:999px;overflow:hidden;margin-bottom:22px}
+  .review-progress i{display:block;height:100%;background:linear-gradient(90deg,var(--brand),#7c3aed);width:0;transition:width .25s}
+  .review-card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px;box-shadow:0 8px 30px rgba(30,45,90,.08)}
+  .review-card-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+  .review-card-head h3{font-size:21px;margin:0;flex:1;min-width:220px}
+  .review-prompt{background:#f8f9fc;border-radius:12px;padding:16px;margin-bottom:16px}
+  .review-answer{border-top:1px solid var(--line);padding-top:8px;margin-top:14px}
+  .review-actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
+  .review-actions button{border:0;border-radius:10px;padding:11px 18px;font-weight:700;cursor:pointer}
+  #review-reveal{background:var(--brand);color:#fff;min-width:150px}
+  .rating-btn{flex:1;min-width:110px;background:#f0f2f7;color:#374151}
+  .rating-btn[data-rating="0"]{background:#fee2e2;color:#b91c1c}
+  .rating-btn[data-rating="1"]{background:#ffedd5;color:#c2410c}
+  .rating-btn[data-rating="2"]{background:#dcfce7;color:#15803d}
+  .rating-btn[data-rating="3"]{background:#dbeafe;color:#1d4ed8}
+  .review-empty{text-align:center;background:var(--card);border:1px dashed var(--line);border-radius:18px;padding:54px 20px;color:var(--muted)}
+  .review-empty strong{display:block;color:var(--ink);font-size:22px;margin-bottom:8px}
+  .review-history{margin-top:22px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .review-history h3{font-size:15px;margin:0 0 10px}.history-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid #f0f1f5;font-size:13px}
+  .history-row:first-child{border-top:0}.history-row b{flex:1}.history-row time{color:var(--muted);font-size:12px}.rating-pill{border-radius:999px;padding:3px 8px;background:var(--brand-soft);color:var(--brand);font-size:12px}
+  .category-filter{display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;margin-bottom:6px;scrollbar-width:none}
+  .category-filter::-webkit-scrollbar{display:none}
+  .category-filter button{white-space:nowrap;border:1px solid var(--line);background:#fff;color:#4b5163;border-radius:999px;padding:7px 12px;cursor:pointer}
+  .category-filter button.active{background:var(--brand);border-color:var(--brand);color:#fff}
+  .auth-box{width:420px;max-width:92vw}
+  .auth-brand{text-align:center;margin-bottom:18px}
+  .auth-brand .logo{font-size:34px}
+  .auth-brand h2{margin:5px 0 4px}
+  .auth-brand p{margin:0;color:var(--muted);font-size:13px}
+  .auth-box input{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:9px;margin:5px 0 10px;font-size:14px}
+  .auth-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:8px}
+  .auth-actions button{padding:11px;border-radius:9px;font-weight:700;cursor:pointer}
+  .auth-state{font-size:12.5px;min-height:20px;color:var(--muted);margin-top:8px}
+  .empty-library{text-align:center;padding:54px 20px;color:var(--muted);background:#fff;border:1px dashed var(--line);border-radius:14px}
+
+  @media (max-width:900px){
+    header{padding:12px 18px}.layout{display:block}.layout nav{display:none}main{padding:18px}
+    .panel,.review-shell{padding:20px}.chart-grid{grid-template-columns:1fr}.chart-box{min-width:0}
+    .user-area{margin-left:0}.hrow{justify-content:space-between}.review-hero{align-items:center}
+  }
+  @media (max-width:600px){
+    body{padding-bottom:72px}header{position:static;padding:12px 16px}.hrow{gap:6px 10px}
+    header h1{font-size:19px}.stats{width:100%;order:3}.user-chip{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:80;background:#fff;border-top:1px solid var(--line);margin:0;padding:7px 8px calc(7px + env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+    .tab{padding:8px 3px;font-size:11.5px;line-height:1.2}.review-shell,.panel,main{padding:16px}
+    .review-hero{align-items:flex-start}.review-hero h2{font-size:23px}.review-kpi{min-width:92px;padding:10px 12px}.review-kpi strong{font-size:24px}
+    .review-card{padding:17px;border-radius:15px}.review-card-head h3{font-size:18px;min-width:100%}.qcard{padding:14px}.qhead h3{min-width:calc(100% - 52px)}
+    .qhead .meta{width:100%;display:flex;gap:5px;align-items:center;flex-wrap:wrap}.chip{margin-left:0}
+    .cards{grid-template-columns:1fr 1fr;gap:9px}.chart-grid{grid-template-columns:minmax(0,1fr)}.chart-box{padding:13px 10px;overflow:hidden}
+    .search-box{display:grid;grid-template-columns:1fr auto}.search-box button{padding:10px 15px}
+    #ai-fab{right:16px;bottom:82px;width:50px;height:50px}.ai-panel,#ai-panel{left:10px;right:10px;bottom:75px;width:auto;height:calc(100vh - 105px);max-height:none}
+    .add-grid,.edit-row{grid-template-columns:1fr}.modal{padding:18px}.auth-actions{grid-template-columns:1fr}
+    .rating-btn{min-width:calc(50% - 6px)}footer{display:none}
+  }
+
+  /* 数据分析页面样式 */
+  .analytics-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px}
+  .analytics-header h2{margin:0}
+  .analytics-range{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+  .analytics-range select{padding:6px 10px;border:1px solid var(--line);border-radius:7px;font-size:13px;background:#fff}
+  .kpi-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .kpi-card .label{font-size:12px;color:var(--muted);margin-bottom:6px}
+  .kpi-card .value{font-size:26px;font-weight:800;color:var(--text)}
+  .kpi-card .sub{font-size:11px;color:var(--muted);margin-top:4px}
+  .table-wrap{overflow-x:auto}
+  .data-table{width:100%;border-collapse:collapse;font-size:13px}
+  .data-table th{background:#f8f9fc;padding:10px 12px;text-align:left;font-weight:600;color:var(--muted);border-bottom:2px solid var(--line);white-space:nowrap}
+  .data-table td{padding:9px 12px;border-bottom:1px solid #f0f1f5}
+  .data-table tr:hover td{background:#fafbff}
+  .retention-good{color:#16a34a;font-weight:600}
+  .retention-mid{color:#d97706;font-weight:600}
+  .retention-low{color:#dc2626;font-weight:600}
+  .funnel-row{display:flex;align-items:center;gap:10px;margin:8px 0}
+  .funnel-bar{height:28px;border-radius:6px;background:linear-gradient(90deg,#4f46e5,#7c3aed);display:flex;align-items:center;padding:0 10px;color:#fff;font-size:12px;font-weight:600;min-width:40px}
+  .funnel-label{font-size:13px;color:var(--text);min-width:80px}
+  .funnel-rate{font-size:12px;color:var(--muted);margin-left:auto}
+  .event-bar-row{display:flex;align-items:center;gap:8px;margin:6px 0}
+  .event-bar-label{font-size:12px;color:var(--text);min-width:90px;text-align:right}
+  .event-bar-track{flex:1;height:20px;background:#f0f1f5;border-radius:4px;overflow:hidden}
+  .event-bar-fill{height:100%;background:linear-gradient(90deg,#0ea5e9,#6366f1);border-radius:4px;display:flex;align-items:center;padding-left:6px;color:#fff;font-size:11px;font-weight:600}
+  .event-bar-count{font-size:12px;color:var(--muted);min-width:50px}
 
 /* 状态下拉菜单 */
 .status-dropdown{position:absolute;z-index:9999;background:#fff;border:1px solid #d0d7de;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.15);min-width:100px;overflow:hidden}
@@ -276,28 +367,59 @@
 <header>
   <div class="hrow">
     <h1>📚 SQL 错题本</h1>
-    <span class="stats">{{STATS}}</span>
+    <span class="stats" id="header-stats">登录后自动同步学习进度</span>
+    <div class="user-area" id="user-area" hidden>
+      <span class="user-chip"><i class="sync-dot"></i><span id="user-name"></span></span>
+      <button class="text-btn" id="logout-btn">退出</button>
+    </div>
   </div>
   <div class="tabbar">
-    <button class="tab active" data-tab="list">📚 错题列表</button>
+    <button class="tab active" data-tab="today">✅ 今日复习</button>
+    <button class="tab" data-tab="list">📚 错题列表</button>
     <button class="tab" data-tab="trend">📊 趋势分析</button>
     <button class="tab" data-tab="search">🔍 智能检索</button>
+    <button class="tab" data-tab="analytics" id="tab-analytics-btn" hidden>📈 数据分析</button>
   </div>
 </header>
 
+<!-- ① 今日复习 -->
+<section id="tab-today" class="review-shell">
+  <div class="review-hero">
+    <div><h2>今日复习</h2><p id="review-subtitle">把一次错误，变成下一次的正确。</p></div>
+    <div class="review-kpi"><strong id="review-due">0</strong><span>今日待复习</span></div>
+  </div>
+  <div class="review-progress"><i id="review-progress-bar"></i></div>
+  <div class="review-empty" id="review-loading"><strong>正在准备今日题目…</strong>复习计划将从云端同步。</div>
+  <div class="review-empty" id="review-empty" hidden><strong>🎉 今日复习完成</strong>今天的到期题目已经全部处理，可以去错题库继续学习。</div>
+  <article class="review-card" id="review-card" hidden>
+    <div class="review-card-head"><span class="badge" id="review-no"></span><h3 id="review-title"></h3><span class="chip" id="review-cat"></span></div>
+    <div class="review-prompt" id="review-prompt"></div>
+    <div class="review-answer" id="review-answer" hidden></div>
+    <div class="review-actions">
+      <button id="review-reveal">查看答案</button>
+      <button class="rating-btn" data-rating="0" hidden>忘记 · 1天</button>
+      <button class="rating-btn" data-rating="1" hidden>模糊 · 稍后</button>
+      <button class="rating-btn" data-rating="2" hidden>掌握 · 正常</button>
+      <button class="rating-btn" data-rating="3" hidden>轻松 · 延长</button>
+    </div>
+  </article>
+  <section class="review-history"><h3>最近复习记录</h3><div id="review-history"><span class="meta">暂无复习记录</span></div></section>
+</section>
+
 <!-- ① 错题列表 -->
-<div class="layout" id="tab-list">
+<div class="layout" id="tab-list" hidden>
   <nav>
     <h3>📋 全部题目</h3>
-    <a href="#all">全部题目<span class="cnt">{{TOTAL}} 题</span></a>
+    <a href="#all">全部题目<span class="cnt" id="nav-total">0 题</span></a>
     <h3>🗂 知识点分类</h3>
-    {{NAV}}
+    <div id="nav-categories"></div>
     <h3>🔖 题目入口（跳转）</h3>
-    {{NAVQ}}
+    <div id="nav-questions"></div>
   </nav>
   <main id="all">
     <div class="list-toolbar"><input id="list-filter" placeholder="🔍 快速过滤当前列表（题号/标题/知识点/错因）…"></div>
-    {{MAIN}}
+    <div class="category-filter" id="category-filter"></div>
+    <div id="question-list"><div class="empty-library">登录后加载你的错题库。</div></div>
   </main>
 </div>
 
@@ -323,7 +445,63 @@
   <div id="s-rel"></div>
 </section>
 
-<footer>本页由 rebuild_index.py 于 {{TIME}} 生成 · 新增/修改错题后请双击「打开错题本.bat」重建索引</footer>
+<!-- ④ 数据分析（仅管理员） -->
+<section id="tab-analytics" class="panel" hidden>
+  <div class="analytics-header">
+    <h2>📈 全站数据分析</h2>
+    <div class="analytics-range">
+      <label>统计周期：</label>
+      <select id="analytics-days">
+        <option value="7">近7天</option>
+        <option value="14">近14天</option>
+        <option value="30" selected>近30天</option>
+        <option value="90">近90天</option>
+      </select>
+      <button class="btn-plain" id="analytics-refresh">🔄 刷新</button>
+    </div>
+  </div>
+
+  <!-- 汇总卡片 -->
+  <div class="cards" id="analytics-summary"></div>
+
+  <!-- 每日趋势 -->
+  <div class="chart-grid" style="margin-top:18px;">
+    <div class="chart-box">
+      <h3>📊 每日访问与活跃趋势</h3>
+      <div id="analytics-daily-chart"></div>
+    </div>
+    <div class="chart-box">
+      <h3>📝 每日注册与复习</h3>
+      <div id="analytics-daily-chart2"></div>
+    </div>
+  </div>
+
+  <!-- 留存分析 -->
+  <div class="chart-box" style="margin-top:18px;">
+    <h3>🔄 用户留存分析（按注册日分组）</h3>
+    <div class="table-wrap" id="analytics-retention"></div>
+  </div>
+
+  <!-- 漏斗 + 事件分布 -->
+  <div class="chart-grid" style="margin-top:18px;">
+    <div class="chart-box">
+      <h3>🎯 用户行为漏斗</h3>
+      <div id="analytics-funnel"></div>
+    </div>
+    <div class="chart-box">
+      <h3>📦 事件类型分布</h3>
+      <div id="analytics-events"></div>
+    </div>
+  </div>
+
+  <!-- AI使用情况 -->
+  <div class="chart-box" style="margin-top:18px;">
+    <h3>🤖 AI 功能使用情况</h3>
+    <div class="table-wrap" id="analytics-ai"></div>
+  </div>
+</section>
+
+<footer>账号数据、复习记录与同步进度由服务端数据库保存 · Markdown 文件保留为可迁移备份</footer>
 
 <!-- AI 浮窗 -->
 <button id="ai-fab" title="AI 错题助手">🤖</button>
@@ -411,20 +589,299 @@
   </div>
 </div>
 
+<!-- 账号登录 -->
+<div class="modal-mask" id="auth-modal" hidden>
+  <div class="modal auth-box">
+    <div class="auth-brand"><div class="logo">📚</div><h2>进入 SQL 错题本</h2><p>一个账号同步电脑和小程序的错题与复习进度</p></div>
+    <label>账号或邮箱</label><input id="auth-username" autocomplete="username" placeholder="至少 3 个字符">
+    <label>密码</label><input id="auth-password" type="password" autocomplete="current-password" placeholder="至少 8 个字符">
+    <div class="auth-actions">
+      <button class="btn-primary" id="auth-login">登录</button>
+      <button class="btn-plain" id="auth-register">创建账号并导入本地错题</button>
+    </div>
+    <div class="auth-state" id="auth-state"></div>
+  </div>
+</div>
+
 <script>
-window.__QUIZ_DATA__ = {{DATA}};
+window.__QUIZ_DATA__ = [];
 
 /* ================= 工具 ================= */
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function monthKey(d){return d&&d.length>=7?d.slice(0,7):'';}
 
-/* ================= Tab 切换 ================= */
-document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
-  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
-  b.classList.add('active');
-  ['list','trend','search'].forEach(t=>{document.getElementById('tab-'+t).hidden=(b.dataset.tab!==t);});
-  if(b.dataset.tab==='trend')renderTrend();
+/* ================= 账号、数据库与同步 ================= */
+let currentUser=null,todayQueue=[],todayStats={due:0,reviewed_today:0},activeCategory='全部';
+function deviceId(){
+  let id=localStorage.getItem('sqlwb_device_id');
+  if(!id){id='web-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);localStorage.setItem('sqlwb_device_id',id);}
+  return id;
+}
+async function apiJson(url,options){
+  const r=await fetch(url,options);const j=await r.json().catch(()=>({}));
+  if(r.status===401){showAuth();throw new Error('AUTH_REQUIRED');}
+  if(!r.ok)throw new Error(j.message||'请求失败');return j;
+}
+function showAuth(message){
+  document.getElementById('auth-modal').hidden=false;
+  document.getElementById('auth-state').textContent=message||'首次使用请创建账号；第一个账号会自动导入现有 Markdown 错题。';
+}
+function hideAuth(){document.getElementById('auth-modal').hidden=true;document.getElementById('auth-password').value='';}
+async function initAccount(){
+  try{
+    const j=await apiJson('/api/auth/me');
+    if(!j.authenticated){showAuth();return;}
+    await enterAccount(j.user);
+  }catch(e){if(e.message!=='AUTH_REQUIRED')showAuth('无法连接数据服务，请确认本地服务已启动。');}
+}
+async function enterAccount(user){
+  currentUser=user;hideAuth();
+  document.getElementById('user-area').hidden=false;document.getElementById('user-name').textContent=user.username;
+  document.getElementById('ai-settings-btn').hidden=!user.is_admin;
+  if(user.is_admin){document.getElementById('tab-analytics-btn').hidden=false;}
+  await loadQuestions();await loadToday();refreshCurrentModel();
+}
+async function submitAuth(mode){
+  const username=document.getElementById('auth-username').value.trim();
+  const password=document.getElementById('auth-password').value;
+  const state=document.getElementById('auth-state');
+  if(username.length<3||password.length<8){state.textContent='账号至少 3 个字符，密码至少 8 个字符。';return;}
+  state.textContent=mode==='register'?'正在创建账号并迁移本地错题…':'正在登录…';
+  try{
+    const j=await apiJson('/api/auth/'+mode,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
+    state.textContent=j.imported?'已导入 '+j.imported+' 道本地错题。':'';await enterAccount(j.user);
+  }catch(e){state.textContent=e.message==='AUTH_REQUIRED'?'登录状态无效，请重试。':e.message;}
+}
+document.getElementById('auth-login').addEventListener('click',()=>submitAuth('login'));
+document.getElementById('auth-register').addEventListener('click',()=>submitAuth('register'));
+document.getElementById('auth-password').addEventListener('keydown',e=>{if(e.key==='Enter')submitAuth('login');});
+document.getElementById('logout-btn').addEventListener('click',async()=>{
+  await fetch('/api/auth/logout',{method:'POST'});currentUser=null;window.__QUIZ_DATA__=[];
+  document.getElementById('user-area').hidden=true;renderLibrary();showAuth('已安全退出。');
+});
+
+function renderLibrary(){
+  const D=window.__QUIZ_DATA__,groups={};D.forEach(q=>(groups[q.cat||'未分类']??=[]).push(q));
+  const cats=Object.keys(groups).sort();
+  document.getElementById('header-stats').textContent='共 '+D.length+' 题 · '+cats.length+' 个知识点 · 云端已同步';
+  document.getElementById('nav-total').textContent=D.length+' 题';
+  document.getElementById('nav-categories').innerHTML=cats.map(c=>'<a href="#cat-'+encodeURIComponent(c)+'" data-category="'+esc(c)+'">'+esc(c)+'<span class="cnt">'+groups[c].length+' 题</span></a>').join('');
+  document.getElementById('nav-questions').innerHTML=cats.map(c=>'<div class="nav-sub"><b>'+esc(c)+'</b>'+groups[c].map(q=>'<a class="question-jump" href="#q-'+q.id+'" data-question-id="'+q.id+'">· '+esc(q.no)+' '+esc(q.title)+'</a>').join('')+'</div>').join('');
+  const filter=document.getElementById('category-filter');
+  filter.innerHTML=['全部'].concat(cats).map(c=>'<button class="'+(c===activeCategory?'active':'')+'" data-category="'+esc(c)+'">'+esc(c)+(c==='全部'?'':' · '+groups[c].length)+'</button>').join('');
+  const visibleCats=activeCategory==='全部'?cats:cats.filter(c=>c===activeCategory);
+  document.getElementById('question-list').innerHTML=visibleCats.length?visibleCats.map(c=>
+    '<section class="cat" id="cat-'+encodeURIComponent(c)+'"><h2>'+esc(c)+' <span class="cnt-badge">'+groups[c].length+' 题</span></h2>'+groups[c].map(q=>
+      '<article class="qcard" id="q-'+q.id+'" data-file="'+q.id+'"><div class="qhead"><span class="badge">'+esc(q.no)+'</span><h3>'+esc(q.title)+'</h3><span class="meta">'+
+      '<span class="chip diff-'+esc(q.diff)+'">'+esc(q.diff)+'</span><span class="chip type">'+esc(q.errtype)+'</span><span class="chip status status-clickable" data-file="'+q.id+'" data-status="'+esc(q.status)+'" title="点击更新掌握状态">'+esc(q.status)+'</span><span class="chip">'+esc(q.date)+'</span><span class="chip">'+esc(q.src)+'</span><button class="qedit" data-file="'+q.id+'" title="编辑此题">✏️</button><button class="qdel" data-file="'+q.id+'" title="删除此题">🗑</button></span></div>'+
+      (q.summary?'<div class="summary">💡 一句话错因：'+esc(q.summary)+'</div>':'')+'<details><summary>查看题目 / 错因 / 解析详情</summary>'+q.body_html+'</details></article>'
+    ).join('')+'</section>').join(''):'<div class="empty-library">还没有错题。点击右下角 AI 助手录入第一道题。</div>';
+}
+async function loadQuestions(){
+  const j=await apiJson('/api/questions');window.__QUIZ_DATA__=j.questions||[];renderLibrary();
+}
+document.getElementById('category-filter').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-category]');if(!b)return;activeCategory=b.dataset.category;renderLibrary();
+});
+document.addEventListener('click',e=>{
+  const a=e.target.closest('.question-jump');if(!a)return;e.preventDefault();
+  activeCategory='全部';renderLibrary();switchTab('list');
+  const el=document.getElementById('q-'+a.dataset.questionId);if(el){const d=el.querySelector('details');if(d)d.open=true;el.scrollIntoView({behavior:'smooth'});}
+});
+
+/* ================= 今日复习与自动调度 ================= */
+function setRatingVisible(visible){document.querySelectorAll('.rating-btn').forEach(b=>b.hidden=!visible);}
+function renderReview(){
+  const loading=document.getElementById('review-loading'),empty=document.getElementById('review-empty'),card=document.getElementById('review-card');loading.hidden=true;
+  document.getElementById('review-due').textContent=todayStats.due;
+  const total=todayStats.due+todayStats.reviewed_today,done=todayStats.reviewed_today;
+  document.getElementById('review-progress-bar').style.width=(total?Math.min(100,done/total*100):100)+'%';
+  document.getElementById('review-subtitle').textContent=done?'今天已复习 '+done+' 题，继续保持。':'先回忆，再看答案；系统会安排下次复习。';
+  if(!todayQueue.length){card.hidden=true;empty.hidden=false;return;}
+  empty.hidden=true;card.hidden=false;const q=todayQueue[0];
+  document.getElementById('review-no').textContent=q.no;document.getElementById('review-title').textContent=q.title;document.getElementById('review-cat').textContent=q.cat;
+  document.getElementById('review-prompt').innerHTML=q.prompt_html;document.getElementById('review-answer').innerHTML=q.answer_html;document.getElementById('review-answer').hidden=true;
+  document.getElementById('review-reveal').hidden=false;setRatingVisible(false);
+}
+function renderReviewHistory(reviews){
+  const labels=['忘记','模糊','掌握','轻松'];
+  document.getElementById('review-history').innerHTML=reviews.length?reviews.slice(0,8).map(r=>
+    '<div class="history-row"><span class="rating-pill">'+labels[Number(r.rating)]+'</span><b>'+esc(r.no)+' '+esc(r.title)+'</b><time>'+esc((r.created_at||'').replace('T',' ').slice(0,16))+'</time></div>'
+  ).join(''):'<span class="meta">暂无复习记录</span>';
+}
+async function loadReviewHistory(){
+  try{const j=await apiJson('/api/review/history?limit=8');renderReviewHistory(j.reviews||[]);}catch(e){}
+}
+async function loadToday(){
+  if(!currentUser)return;document.getElementById('review-loading').hidden=false;document.getElementById('review-card').hidden=true;document.getElementById('review-empty').hidden=true;
+  try{const j=await apiJson('/api/review/today?limit=30');todayQueue=j.questions||[];todayStats=j.stats||{due:0,reviewed_today:0};renderReview();loadReviewHistory();}
+  catch(e){document.getElementById('review-loading').innerHTML='<strong>暂时无法读取复习计划</strong>'+esc(e.message);}
+}
+document.getElementById('review-reveal').addEventListener('click',()=>{
+  document.getElementById('review-answer').hidden=false;document.getElementById('review-reveal').hidden=true;setRatingVisible(true);
+});
+document.querySelectorAll('.rating-btn').forEach(btn=>btn.addEventListener('click',async()=>{
+  if(!todayQueue.length)return;document.querySelectorAll('.rating-btn').forEach(b=>b.disabled=true);
+  try{
+    await apiJson('/api/review',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question_id:todayQueue[0].id,rating:Number(btn.dataset.rating),device_id:deviceId()})});
+    todayQueue.shift();todayStats.due=Math.max(0,todayStats.due-1);todayStats.reviewed_today+=1;renderReview();loadQuestions();loadReviewHistory();
+  }catch(e){alert('保存复习记录失败：'+e.message);}
+  finally{document.querySelectorAll('.rating-btn').forEach(b=>b.disabled=false);}
 }));
+
+/* ================= Tab 切换 ================= */
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  const active=document.querySelector('.tab[data-tab="'+name+'"]');if(active)active.classList.add('active');
+  ['today','list','trend','search','analytics'].forEach(t=>{const el=document.getElementById('tab-'+t);if(el)el.hidden=(name!==t);});
+  if(name==='trend')renderTrend();
+  if(name==='today')loadToday();
+  if(name==='analytics')loadAnalytics();
+}
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
+
+/* ================= 数据分析 ================= */
+let analyticsLoaded=false;
+function escHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function fmtNum(n){return Number(n||0).toLocaleString();}
+function pct(v){return v==null?'—':(v*100).toFixed(1)+'%';}
+function pctClass(v){if(v==null)return '';if(v>=0.5)return 'retention-good';if(v>=0.25)return 'retention-mid';return 'retention-low';}
+
+async function loadAnalytics(){
+  const days=document.getElementById('analytics-days').value;
+  try{
+    const [sum,daily,ret,fun,ev,ai]=await Promise.all([
+      apiJson('/api/analytics/summary?days='+days),
+      apiJson('/api/analytics/daily?days='+days),
+      apiJson('/api/analytics/retention?days=14'),
+      apiJson('/api/analytics/funnel'),
+      apiJson('/api/analytics/events?days='+days),
+      apiJson('/api/analytics/ai_usage?days='+days),
+    ]);
+    renderAnalyticsSummary(sum);
+    renderAnalyticsDaily(daily.daily||[]);
+    renderAnalyticsRetention(ret.retention||[]);
+    renderAnalyticsFunnel(fun.funnel||[]);
+    renderAnalyticsEvents(ev.events||[]);
+    renderAnalyticsAI(ai.ai_usage||[]);
+    analyticsLoaded=true;
+  }catch(e){
+    if(e.message!=='AUTH_REQUIRED'){
+      document.getElementById('analytics-summary').innerHTML='<div class="empty-library">加载失败：'+escHtml(e.message)+'</div>';
+    }
+  }
+}
+
+function renderAnalyticsSummary(s){
+  const cards=[
+    {label:'总用户数',value:fmtNum(s.total_users),sub:'累计注册'},
+    {label:'总错题数',value:fmtNum(s.total_questions),sub:'已掌握 '+fmtNum(s.mastered_questions)+' 题'},
+    {label:'总复习次数',value:fmtNum(s.total_reviews),sub:'累计复习'},
+    {label:'期间访客',value:fmtNum(s.period_visitors),sub:'近'+s.period_days+'天独立访客'},
+    {label:'期间注册',value:fmtNum(s.period_registrations),sub:'近'+s.period_days+'天新用户'},
+    {label:'期间复习',value:fmtNum(s.period_reviews),sub:'近'+s.period_days+'天复习次数'},
+  ];
+  document.getElementById('analytics-summary').innerHTML=cards.map(c=>
+    '<div class="kpi-card"><div class="label">'+c.label+'</div><div class="value">'+c.value+'</div><div class="sub">'+c.sub+'</div></div>'
+  ).join('');
+}
+
+function renderAnalyticsDaily(daily){
+  if(!daily.length){document.getElementById('analytics-daily-chart').innerHTML='<p class="meta">暂无数据</p>';return;}
+  // 图表1：页面浏览 + 活跃用户
+  const items1=daily.map(d=>({label:d.day.slice(5),value:d.page_views||0,active:d.active_users||0}));
+  const max1=Math.max(1,...items1.map(i=>Math.max(i.value,i.active)));
+  let chart1='<svg viewBox="0 0 560 220" class="chart" style="width:100%">';
+  const W=560,H=220,padL=34,padB=30,padT=14;
+  const bw=(W-padL-10)/items1.length;
+  for(let g=0;g<=4;g++){const y=padT+(H-padT-padB)*g/4;chart1+='<line x1="'+padL+'" y1="'+y+'" x2="'+(W-8)+'" y2="'+y+'" stroke="#eef0f4"/>';chart1+='<text x="'+(padL-4)+'" y="'+(y+4)+'" text-anchor="end" font-size="9" fill="#999">'+Math.round(max1*(4-g)/4)+'</text>';}
+  items1.forEach((it,i)=>{
+    const x=padL+i*bw+2;
+    const h1=(H-padT-padB)*it.value/max1;
+    const h2=(H-padT-padB)*it.active/max1;
+    chart1+='<rect x="'+x+'" y="'+(H-padB-h1)+'" width="'+(bw/2-2)+'" height="'+h1+'" fill="#4f46e5" rx="2"/>';
+    chart1+='<rect x="'+(x+bw/2)+'" y="'+(H-padB-h2)+'" width="'+(bw/2-2)+'" height="'+h2+'" fill="#f59e0b" rx="2"/>';
+    if(i%Math.ceil(items1.length/10)===0)chart1+='<text x="'+(x+bw/2)+'" y="'+(H-padB+14)+'" text-anchor="middle" font-size="9" fill="#999">'+it.label+'</text>';
+  });
+  chart1+='</svg>';
+  chart1+='<div style="display:flex;gap:16px;margin-top:8px;font-size:12px;color:#666"><span><i style="display:inline-block;width:10px;height:10px;background:#4f46e5;border-radius:2px;margin-right:4px"></i>页面浏览</span><span><i style="display:inline-block;width:10px;height:10px;background:#f59e0b;border-radius:2px;margin-right:4px"></i>活跃用户</span></div>';
+  document.getElementById('analytics-daily-chart').innerHTML=chart1;
+
+  // 图表2：注册 + 复习
+  const items2=daily.map(d=>({label:d.day.slice(5),reg:d.registrations||0,rev:d.reviews||0}));
+  const max2=Math.max(1,...items2.map(i=>Math.max(i.reg,i.rev)));
+  let chart2='<svg viewBox="0 0 560 220" class="chart" style="width:100%">';
+  items2.forEach((it,i)=>{
+    const x=padL+i*bw+2;
+    const h1=(H-padT-padB)*it.reg/max2;
+    const h2=(H-padT-padB)*it.rev/max2;
+    chart2+='<rect x="'+x+'" y="'+(H-padB-h1)+'" width="'+(bw/2-2)+'" height="'+h1+'" fill="#16a34a" rx="2"/>';
+    chart2+='<rect x="'+(x+bw/2)+'" y="'+(H-padB-h2)+'" width="'+(bw/2-2)+'" height="'+h2+'" fill="#dc2626" rx="2"/>';
+    if(i%Math.ceil(items2.length/10)===0)chart2+='<text x="'+(x+bw/2)+'" y="'+(H-padB+14)+'" text-anchor="middle" font-size="9" fill="#999">'+it.label+'</text>';
+  });
+  for(let g=0;g<=4;g++){const y=padT+(H-padT-padB)*g/4;chart2+='<line x1="'+padL+'" y1="'+y+'" x2="'+(W-8)+'" y2="'+y+'" stroke="#eef0f4"/>';}
+  chart2+='</svg>';
+  chart2+='<div style="display:flex;gap:16px;margin-top:8px;font-size:12px;color:#666"><span><i style="display:inline-block;width:10px;height:10px;background:#16a34a;border-radius:2px;margin-right:4px"></i>新注册</span><span><i style="display:inline-block;width:10px;height:10px;background:#dc2626;border-radius:2px;margin-right:4px"></i>复习次数</span></div>';
+  document.getElementById('analytics-daily-chart2').innerHTML=chart2;
+}
+
+function renderAnalyticsRetention(ret){
+  if(!ret.length){document.getElementById('analytics-retention').innerHTML='<p class="meta">暂无留存数据（需要至少有注册用户）</p>';return;}
+  let html='<table class="data-table"><thead><tr><th>注册日</th><th>注册人数</th><th>次日留存</th><th>3日留存</th><th>7日留存</th><th>14日留存</th></tr></thead><tbody>';
+  ret.slice().reverse().forEach(r=>{
+    html+='<tr><td>'+escHtml(r.cohort_date)+'</td><td>'+r.cohort_size+'</td>';
+    html+='<td class="'+pctClass(r.d1_rate)+'">'+(r.d1==null?'—':r.d1+' 人 ('+pct(r.d1_rate)+')')+'</td>';
+    html+='<td class="'+pctClass(r.d3_rate)+'">'+(r.d3==null?'—':r.d3+' 人 ('+pct(r.d3_rate)+')')+'</td>';
+    html+='<td class="'+pctClass(r.d7_rate)+'">'+(r.d7==null?'—':r.d7+' 人 ('+pct(r.d7_rate)+')')+'</td>';
+    html+='<td class="'+pctClass(r.d14_rate)+'">'+(r.d14==null?'—':r.d14+' 人 ('+pct(r.d14_rate)+')')+'</td></tr>';
+  });
+  html+='</tbody></table>';
+  document.getElementById('analytics-retention').innerHTML=html;
+}
+
+function renderAnalyticsFunnel(fun){
+  if(!fun.length){document.getElementById('analytics-funnel').innerHTML='<p class="meta">暂无数据</p>';return;}
+  const max=Math.max(1,...fun.map(f=>f.count));
+  let html='';
+  fun.forEach((f,i)=>{
+    const w=Math.max(8,(f.count/max)*100);
+    html+='<div class="funnel-row"><span class="funnel-label">'+(i+1)+'. '+escHtml(f.step)+'</span>';
+    html+='<div class="funnel-bar" style="width:'+w+'%">'+fmtNum(f.count)+'</div>';
+    html+='<span class="funnel-rate">'+(i===0?'100%':pct(f.rate_from_prev))+'</span></div>';
+  });
+  document.getElementById('analytics-funnel').innerHTML=html;
+}
+
+function renderAnalyticsEvents(ev){
+  if(!ev.length){document.getElementById('analytics-events').innerHTML='<p class="meta">暂无事件数据</p>';return;}
+  const max=Math.max(1,...ev.map(e=>e.cnt));
+  const nameMap={page_view:'页面浏览',register:'注册',login:'登录',logout:'登出',add_question:'新增错题',edit_question:'编辑错题',delete_question:'删除错题',review:'复习',ai_chat:'AI对话',ai_classify:'AI识别',ai_revise:'AI修正'};
+  let html='';
+  ev.forEach(e=>{
+    const name=nameMap[e.event_type]||e.event_type;
+    const w=Math.max(2,(e.cnt/max)*100);
+    html+='<div class="event-bar-row"><span class="event-bar-label">'+escHtml(name)+'</span>';
+    html+='<div class="event-bar-track"><div class="event-bar-fill" style="width:'+w+'%">'+e.cnt+'</div></div>';
+    html+='<span class="event-bar-count">'+e.unique_users+'人</span></div>';
+  });
+  document.getElementById('analytics-events').innerHTML=html;
+}
+
+function renderAnalyticsAI(ai){
+  if(!ai.length){document.getElementById('analytics-ai').innerHTML='<p class="meta">暂无 AI 使用数据</p>';return;}
+  const nameMap={ai_chat:'AI 对话助手',ai_classify:'AI 图片识别归档',ai_revise:'AI 错题修正'};
+  let html='<table class="data-table"><thead><tr><th>功能</th><th>调用次数</th><th>使用用户数</th><th>人均调用</th></tr></thead><tbody>';
+  ai.forEach(a=>{
+    const name=nameMap[a.event_type]||a.event_type;
+    const perUser=a.users? (a.cnt/a.users).toFixed(1):'0';
+    html+='<tr><td>'+escHtml(name)+'</td><td>'+a.cnt+'</td><td>'+a.users+'</td><td>'+perUser+'</td></tr>';
+  });
+  html+='</tbody></table>';
+  document.getElementById('analytics-ai').innerHTML=html;
+}
+
+document.getElementById('analytics-days').addEventListener('change',()=>{if(!document.getElementById('tab-analytics').hidden)loadAnalytics();});
+document.getElementById('analytics-refresh').addEventListener('click',loadAnalytics);
 
 /* ================= 列表过滤 ================= */
 document.getElementById('list-filter').addEventListener('input',e=>{
@@ -443,7 +900,7 @@ document.querySelectorAll('a[href^="#q-"]').forEach(a=>{
   a.addEventListener('click',()=>{
     document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
     document.querySelector('.tab[data-tab="list"]').classList.add('active');
-    ['trend','search'].forEach(t=>{document.getElementById('tab-'+t).hidden=true;});
+    ['today','trend','search'].forEach(t=>{document.getElementById('tab-'+t).hidden=true;});
     document.getElementById('tab-list').hidden=false;
     const el=document.querySelector(a.getAttribute('href'));
     if(el){const d=el.querySelector('details');if(d)d.open=true;setTimeout(()=>el.scrollIntoView({behavior:'smooth'}),50);}
@@ -598,11 +1055,8 @@ function renderSearchResult(q,i){
     <div class="ssum">💡 ${esc(q.summary)}</div></div>`;
 }
 function openQuestion(idx){
-  const id='q'+(idx+1).toString().padStart(4,'0');
-  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
-  document.querySelector('.tab[data-tab="list"]').classList.add('active');
-  ['trend','search'].forEach(t=>{document.getElementById('tab-'+t).hidden=true;});
-  document.getElementById('tab-list').hidden=false;
+  const q=window.__QUIZ_DATA__[idx];if(!q)return;const id='q-'+q.id;
+  activeCategory='全部';renderLibrary();switchTab('list');
   const el=document.getElementById(id);
   if(el){const d=el.querySelector('details');if(d)d.open=true;setTimeout(()=>el.scrollIntoView({behavior:'smooth'}),50);}
 }
@@ -859,6 +1313,7 @@ function runTest(){
     .catch(()=>{setTest('❌ 测试失败（本地服务未启动？）','bad');return false;});
 }
 function openSettings(){
+  if(currentUser&&!currentUser.is_admin){addMsg('sys','AI 模型由站点管理员统一配置。');return;}
   document.getElementById('ai-modal').hidden=false;
   document.getElementById('cfg-key').value='';
   setTest('',false);
@@ -1005,6 +1460,7 @@ function openEditModal(file){
       document.getElementById('edit-loading').style.display='none';
       if(!res||!res.ok){alert('加载失败：'+(res&&res.message||'未知'));modal.hidden=true;return;}
       document.getElementById('edit-form').style.display='block';
+      document.getElementById('edit-version').value=res.version||'';
       var m=res.meta||{};
       document.getElementById('edit-no').value=m['题号']||'';
       document.getElementById('edit-title').value=m['标题']||'';
@@ -1044,6 +1500,7 @@ document.addEventListener('click',function(e){
     var file=document.getElementById('edit-file').value;
     var payload={
       file:file,
+      version:document.getElementById('edit-version').value||null,
       meta:{
         '题号':document.getElementById('edit-no').value.trim(),
         '标题':document.getElementById('edit-title').value.trim(),
@@ -1190,7 +1647,7 @@ document.addEventListener('keydown',function(e){
   }
 });
 
-refreshCurrentModel();
+initAccount();
 </script>
 
 <!-- 编辑错题模态框 -->
@@ -1201,6 +1658,7 @@ refreshCurrentModel();
       <div id="edit-loading">⏳ 加载中…</div>
       <div id="edit-form" style="display:none">
         <input type="hidden" id="edit-file">
+        <input type="hidden" id="edit-version">
         <div class="edit-row">
           <div class="edit-field"><label>题号</label><input id="edit-no" type="text"></div>
           <div class="edit-field"><label>标题</label><input id="edit-title" type="text"></div>

@@ -4,6 +4,13 @@ config/ai_config.json
 !错题库/.gitkeep
 index.html
 server.pid
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/user_content/
+
+# 构建产物
+dist/
 
 # 临时文件
 .preview/
