@@ -1,138 +1,137 @@
-# GitHub Actions 自动部署
+# GitHub 测试与服务器主动拉取部署
 
-本项目使用 GitHub Actions 完成以下流程：
+本项目不再要求 GitHub Actions 通过 SSH 进入生产服务器。部署流程为：
 
-1. 每次向 `main` 分支推送代码后，自动运行后端测试、前端语法检查和部署脚本检查。
-2. 测试全部通过后，将 `scripts/`、`assets/` 和 `deploy/` 打包并上传到腾讯云服务器。
-3. 服务器先备份当前版本，再更新应用并进行健康检查；更新失败时自动回滚。
+1. 代码推送到 `main` 后，GitHub Actions 自动运行后端测试、前端语法检查及部署脚本检查。
+2. 腾讯云服务器每 5 分钟查询一次 `main` 的最新提交 SHA。
+3. 只有该 SHA 对应的 `.github/workflows/deploy.yml` 工作流成功后，服务器才下载代码包。
+4. 服务器再次运行后端测试，然后备份、更新、健康检查；失败时恢复更新前版本。
 
-部署不会覆盖服务器上的数据库、AI/SMTP 密钥或错题源文件。`data/`、`config/` 和 `错题库/` 不在自动上传范围内。
+服务器只需要访问 GitHub 的出站 HTTPS 443，不需要开放入站 SSH。部署不会覆盖 `/opt/sql-wrongbook/data`、`/opt/sql-wrongbook/config` 或 `/opt/sql-wrongbook/questions`。
 
-## 一、服务器前提
+## 一、推荐频率
 
-- 公网地址：`49.232.12.206`
-- SSH 用户：`ubuntu`
-- SSH 端口：`2222`
-- 应用目录：`/opt/sql-wrongbook/app`
-- systemd 服务：`sql-wrongbook.service`
-- GitHub 托管运行器的出口 IP 会变化，因此腾讯云防火墙的 TCP 2222 需要允许全部 IPv4 地址访问。服务器必须继续保持仅密钥登录，并禁用 SSH 密码登录。
-- `ubuntu` 用户执行 `sudo -n true` 必须成功，否则无人值守部署会停在 sudo 密码提示处。
+定时器采用：
 
-## 二、创建一把专用部署密钥
-
-不要复用个人 SSH 密钥，也不要把私钥发送到聊天、邮件或提交进 Git。
-
-在本机 PowerShell 中运行：
-
-```powershell
-ssh-keygen -t ed25519 -f "$env:USERPROFILE\.ssh\sql_wrongbook_github_actions_ed25519" -C "github-actions-mistakebook"
+```ini
+OnBootSec=2min
+OnUnitActiveSec=5min
+RandomizedDelaySec=30s
+Persistent=true
 ```
 
-出现口令提示时连续按两次 Enter，创建一把无口令、仅供 GitHub Actions 使用的密钥。然后复制公钥：
+服务器启动 2 分钟后检查，之后约每 5 分钟检查一次；随机延迟最多 30 秒。没有新提交时只请求一次 GitHub API 并立即退出。
 
-```powershell
-Get-Content "$env:USERPROFILE\.ssh\sql_wrongbook_github_actions_ed25519.pub" | Set-Clipboard
-```
+## 二、启用 GitHub Actions
 
-在腾讯云网页终端登录服务器，依次运行：
+打开仓库 `wsq77477747/mistakebook`：
 
-```bash
-install -d -m 700 ~/.ssh
-touch ~/.ssh/authorized_keys
-chmod 600 ~/.ssh/authorized_keys
-read -r CI_PUBLIC_KEY
-```
+`Settings` → `Actions` → `General` → `Actions permissions`
 
-执行最后一条命令后，终端会等待输入。粘贴刚才复制的一整行公钥并按 Enter，然后运行：
+允许仓库运行工作流并保存。推送后在 `Actions` 页面应能看到 `Test before Server Pull`。服务器不会部署没有成功测试记录的提交。
 
-```bash
-grep -qxF "$CI_PUBLIC_KEY" ~/.ssh/authorized_keys || printf '%s\n' "$CI_PUBLIC_KEY" >> ~/.ssh/authorized_keys
-unset CI_PUBLIC_KEY
-sudo -n true && echo SUDO_OK
-```
+新版工作流不再使用以下 SSH Secrets；确认主动拉取运行正常后可将它们删除：
 
-看到 `SUDO_OK` 后，在本机 PowerShell 验证新密钥：
+- `SSH_HOST`
+- `SSH_USER`
+- `SSH_PORT`
+- `SSH_PRIVATE_KEY`
+- `SSH_KNOWN_HOSTS`
 
-```powershell
-ssh -i "$env:USERPROFILE\.ssh\sql_wrongbook_github_actions_ed25519" -p 2222 -o IdentitiesOnly=yes ubuntu@49.232.12.206 "echo SSH_OK; sudo -n true && echo SUDO_OK"
-```
+## 三、提交主动拉取代码
 
-应同时看到 `SSH_OK` 和 `SUDO_OK`。
-
-## 三、固定服务器身份
-
-在腾讯云网页终端运行：
-
-```bash
-sudo awk '{print "[49.232.12.206]:2222 " $1 " " $2}' /etc/ssh/ssh_host_ed25519_key.pub
-```
-
-保存输出的完整一行，格式类似：
-
-```text
-[49.232.12.206]:2222 ssh-ed25519 AAAAC3...
-```
-
-这会让 GitHub Actions 校验服务器身份，避免把代码和凭据发送给被冒充的服务器。以后如果重装服务器或重新生成 SSH 主机密钥，需要重新取得并更新该值。
-
-## 四、配置 GitHub 仓库 Secrets
-
-打开仓库 `wsq77477747/mistakebook`，依次进入：
-
-`Settings` → `Secrets and variables` → `Actions` → `New repository secret`
-
-添加以下 5 个 Repository secrets：
-
-| Secret 名称 | 值 |
-| --- | --- |
-| `SSH_HOST` | `49.232.12.206` |
-| `SSH_USER` | `ubuntu` |
-| `SSH_PORT` | `2222` |
-| `SSH_PRIVATE_KEY` | 专用部署私钥的完整内容 |
-| `SSH_KNOWN_HOSTS` | 上一步得到的 `[49.232.12.206]:2222 ssh-ed25519 ...` 完整一行 |
-
-在本机 PowerShell 中复制私钥：
-
-```powershell
-Get-Content -Raw "$env:USERPROFILE\.ssh\sql_wrongbook_github_actions_ed25519" | Set-Clipboard
-```
-
-把剪贴板内容直接粘贴到 `SSH_PRIVATE_KEY`，必须包括开头和结尾：
-
-```text
------BEGIN OPENSSH PRIVATE KEY-----
-...
------END OPENSSH PRIVATE KEY-----
-```
-
-不要创建同名的普通 Variables；工作流读取的是 Repository secrets。
-
-## 五、提交并首次启用
-
-自动部署工作流位于 `.github/workflows/deploy.yml`。它在代码进入 `main` 时启用，所以先检查本次准备提交的文件：
+在本机 PowerShell 中执行：
 
 ```powershell
 cd "C:\Users\Administrator\Documents\AI+DA项目\SQL错题整理"
 git status --short
 git add -A
 git status --short
-git commit -m "新增邮箱验证码并启用自动部署"
+git commit -m "改为服务器每5分钟主动拉取部署"
 git push origin main
 ```
 
-提交前重点确认没有 `config/ai_config.json`、`config/email_config.json`、数据库文件或私钥。它们已经由 `.gitignore` 排除，但仍应人工检查一次。
+进入 GitHub `Actions` 页面，等待这次提交的 `Test before Server Pull` 变为绿色成功状态。
 
-推送后进入 GitHub 仓库的 `Actions` 页面，打开 `Test and Deploy`：
+## 四、首次安装定时器
 
-- `Test` 先运行；
-- 测试通过后运行 `Deploy production`；
-- 部署日志末尾出现 `UPDATE_OK` 即为成功。
+由于入站 SSH 当前不可用，使用腾讯云网页终端执行一次引导安装：
 
-也可以进入该工作流，点击 `Run workflow` 手动重新部署当前 `main`。
+```bash
+bootstrap_dir="$(mktemp -d /tmp/sql-wrongbook-bootstrap.XXXXXX)"
+curl -fL --retry 3 \
+  -o "$bootstrap_dir/mistakebook.tar.gz" \
+  https://codeload.github.com/wsq77477747/mistakebook/tar.gz/refs/heads/main
+tar -xzf "$bootstrap_dir/mistakebook.tar.gz" -C "$bootstrap_dir"
+project_dir="$(find "$bootstrap_dir" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+cd "$project_dir"
+bash deploy/install_pull_timer.sh
+```
 
-## 六、以后如何更新
+成功时会输出：
 
-以后不需要手动上传 ZIP。正常流程是：
+```text
+PULL_TIMER_OK
+```
+
+安装脚本会把拉取程序放在 `/opt/sql-wrongbook/app/deploy/pull_update.py`，状态保存在 `/opt/sql-wrongbook/deploy-state/last_success_sha`。
+
+## 五、首次手动检查
+
+无需等待 5 分钟，可以立即触发：
+
+```bash
+sudo systemctl start sql-wrongbook-pull.service
+sudo journalctl -u sql-wrongbook-pull.service -n 100 --no-pager
+```
+
+成功日志应依次出现：
+
+```text
+Latest main commit: <SHA>
+Downloading the tested release archive
+UPDATE_OK
+PULL_UPDATE_OK: deployed <SHA>
+```
+
+如果显示 `WAITING_FOR_CI`，进入 GitHub `Actions` 页面确认相同 SHA 的工作流是否已完成并成功。
+
+## 六、查看运行状态
+
+查看下一次检查时间：
+
+```bash
+systemctl list-timers --all sql-wrongbook-pull.timer --no-pager
+```
+
+查看最近部署日志：
+
+```bash
+sudo journalctl -u sql-wrongbook-pull.service -n 100 --no-pager
+```
+
+查看已成功部署的提交：
+
+```bash
+sudo cat /opt/sql-wrongbook/deploy-state/last_success_sha
+```
+
+立即检查更新：
+
+```bash
+sudo systemctl start sql-wrongbook-pull.service
+```
+
+暂停和恢复自动检查：
+
+```bash
+sudo systemctl disable --now sql-wrongbook-pull.timer
+sudo systemctl enable --now sql-wrongbook-pull.timer
+```
+
+## 七、日常更新
+
+以后只需要：
 
 ```powershell
 git add -A
@@ -140,17 +139,15 @@ git commit -m "说明本次更新"
 git push origin main
 ```
 
-GitHub Actions 会自动完成测试、上传和部署。Pull Request 只运行测试，不会部署生产服务器。
+GitHub 测试成功后，服务器通常会在 5 分钟内自动部署。Pull Request 只运行测试；只有进入 `main` 的提交才会被服务器检查。
 
-服务器旧版本保存在 `/opt/sql-wrongbook/releases/<UTC时间>`。若健康检查失败，脚本会自动恢复刚才备份的 `scripts/`、`assets/` 和 `deploy/`。
+## 八、错误处理
 
-## 七、常见错误
+- `No CI run exists for this commit`：GitHub Actions 未启用或尚未为该提交创建工作流。
+- `CI is still running`：等待下一次定时检查。
+- `CI completed without success`：修复测试后重新提交，失败提交不会部署。
+- GitHub API 或 codeload 访问失败：服务记录失败，5 分钟后自动重试，不影响当前网站。
+- 下载后的后端测试失败：不会执行更新。
+- 更新或健康检查失败：`deploy/update_native.sh` 自动恢复更新前的 `scripts/`、`assets/` 和 `deploy/`。
 
-- `Missing repository secret`：对应的 Secret 未创建、名称拼写错误或值为空。
-- `Host key verification failed`：`SSH_KNOWN_HOSTS` 不是服务器输出的完整一行，或服务器主机密钥已变化。
-- `Permission denied (publickey)`：GitHub 中的私钥与服务器 `authorized_keys` 中的公钥不配对。
-- `sudo: a password is required`：先在服务器修复 `ubuntu` 用户的非交互 sudo 权限，再重新运行工作流。
-- `Connection timed out`：检查腾讯云防火墙和 Ubuntu 防火墙是否允许 TCP 2222。
-- 健康检查失败：工作流会自动回滚，并在日志中打印 `sql-wrongbook.service` 最近的服务日志。
-
-首次自动部署成功后，如果腾讯云防火墙中仍保留名为“Codex临时部署”的临时规则，可以删除它；保留正式的 TCP 2222 规则。80/443 继续用于网站访问。
+主动拉取确认正常后，可以删除腾讯云中为排查创建的 TCP 22、2222 和 22022 公网规则；网站继续保留 80，配置 HTTPS 后保留 443。

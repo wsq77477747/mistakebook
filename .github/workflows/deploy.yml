@@ -1,4 +1,4 @@
-name: Test and Deploy
+name: Test before Server Pull
 
 on:
   push:
@@ -11,8 +11,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: sql-wrongbook-production
-  cancel-in-progress: false
+  group: sql-wrongbook-main-tests
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -38,87 +38,9 @@ jobs:
       - name: Check frontend syntax
         run: node tests/check_frontend.mjs
 
-      - name: Check deployment script
-        run: bash -n deploy/update_native.sh
-
-  deploy:
-    name: Deploy production
-    if: github.event_name != 'pull_request'
-    needs: test
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      SSH_HOST: ${{ secrets.SSH_HOST }}
-      SSH_USER: ${{ secrets.SSH_USER }}
-      SSH_PORT: ${{ secrets.SSH_PORT }}
-      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Validate deployment secrets
-        shell: bash
+      - name: Check deployment scripts
         run: |
-          set -euo pipefail
-          for value in SSH_HOST SSH_USER SSH_PORT SSH_PRIVATE_KEY SSH_KNOWN_HOSTS; do
-            if [[ -z "${!value:-}" ]]; then
-              echo "Missing repository secret: $value" >&2
-              exit 1
-            fi
-          done
-
-      - name: Configure SSH
-        shell: bash
-        run: |
-          set -euo pipefail
-          install -d -m 700 "$HOME/.ssh"
-          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/deploy_key"
-          chmod 600 "$HOME/.ssh/deploy_key"
-          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
-          chmod 600 "$HOME/.ssh/known_hosts"
-
-      - name: Build release archive
-        shell: bash
-        run: |
-          set -euo pipefail
-          tar \
-            --exclude='__pycache__' \
-            --exclude='*.pyc' \
-            -czf "$RUNNER_TEMP/sql-wrongbook-${GITHUB_SHA}.tar.gz" \
-            scripts assets deploy
-
-      - name: Upload release archive
-        shell: bash
-        run: |
-          set -euo pipefail
-          scp \
-            -P "$SSH_PORT" \
-            -i "$HOME/.ssh/deploy_key" \
-            -o BatchMode=yes \
-            -o IdentitiesOnly=yes \
-            "$RUNNER_TEMP/sql-wrongbook-${GITHUB_SHA}.tar.gz" \
-            "$SSH_USER@$SSH_HOST:/tmp/sql-wrongbook-${GITHUB_SHA}.tar.gz"
-
-      - name: Activate release
-        shell: bash
-        run: |
-          set -euo pipefail
-          ssh \
-            -p "$SSH_PORT" \
-            -i "$HOME/.ssh/deploy_key" \
-            -o BatchMode=yes \
-            -o IdentitiesOnly=yes \
-            "$SSH_USER@$SSH_HOST" \
-            "REMOTE_ARCHIVE='/tmp/sql-wrongbook-${GITHUB_SHA}.tar.gz' bash -s" <<'REMOTE'
-          set -euo pipefail
-          work_dir="$(mktemp -d /tmp/sql-wrongbook-release.XXXXXX)"
-          cleanup() {
-            rm -rf -- "$work_dir" "$REMOTE_ARCHIVE"
-          }
-          trap cleanup EXIT
-          tar -xzf "$REMOTE_ARCHIVE" -C "$work_dir"
-          cd "$work_dir"
-          bash deploy/update_native.sh
-          REMOTE
+          python -m py_compile deploy/pull_update.py
+          bash -n deploy/update_native.sh
+          bash -n deploy/install_pull_timer.sh
+          bash -n deploy/install_native.sh

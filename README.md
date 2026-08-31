@@ -1,6 +1,6 @@
 # SQL 错题本
 
-GitHub Actions 自动测试与部署的配置方法见 [docs/GITHUB_ACTIONS_DEPLOY.md](docs/GITHUB_ACTIONS_DEPLOY.md)。
+GitHub Actions 测试与服务器每 5 分钟主动拉取的部署方法见 [docs/GITHUB_ACTIONS_DEPLOY.md](docs/GITHUB_ACTIONS_DEPLOY.md)。
 
 本目录用于把 SQL 刷题中的错题**分门别类**整理，并汇总成一个带 **趋势分析 / 智能检索 / AI 助手** 的 HTML 页面。
 

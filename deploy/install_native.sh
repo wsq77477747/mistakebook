@@ -110,6 +110,7 @@ sudo systemctl enable --now sql-wrongbook.service
 sudo systemctl enable --now nginx
 sudo systemctl restart nginx
 sudo systemctl enable --now sql-wrongbook-backup.timer
+bash deploy/install_pull_timer.sh
 
 for _ in {1..30}; do
   if curl -fsS http://127.0.0.1/api/auth/me >/dev/null; then
