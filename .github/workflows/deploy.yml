@@ -19,28 +19,27 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
+      - name: Checkout without external actions
+        run: |
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "${GITHUB_REF}"
+          git checkout --detach FETCH_HEAD
 
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: "22"
+      - name: Show bundled runtimes
+        run: |
+          python3 --version
+          node --version
 
       - name: Run backend tests
-        run: python -m unittest discover -s tests -v
+        run: python3 -m unittest discover -s tests -v
 
       - name: Check frontend syntax
         run: node tests/check_frontend.mjs
 
       - name: Check deployment scripts
         run: |
-          python -m py_compile deploy/pull_update.py
+          python3 -m py_compile deploy/pull_update.py
           bash -n deploy/update_native.sh
           bash -n deploy/install_pull_timer.sh
           bash -n deploy/install_native.sh
