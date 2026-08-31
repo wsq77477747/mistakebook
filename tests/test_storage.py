@@ -148,6 +148,42 @@ class StorageTests(unittest.TestCase):
         self.assertIsNone(storage.user_by_email("nobody@example.com"))
         self.assertIsNone(storage.user_by_email(""))
 
+    def test_invite_code_credit_and_quota(self):
+        inviter = storage.register_user("inviter", "password123", "inviter@example.com")
+        self.assertTrue(inviter["invite_code"])
+        self.assertEqual(storage.daily_ai_quota(inviter["id"]), storage.FREE_AI_CALLS_PER_DAY)
+        # 无效邀请码被忽略，不影响注册
+        guest = storage.register_user("guest", "password123", "guest@example.com", invite_code="BADCODE1")
+        self.assertFalse(guest["invite_applied"])
+        # 有效邀请码：邀请人额度 +10
+        friend = storage.register_user("friend", "password123", "friend@example.com",
+                                       invite_code=inviter["invite_code"])
+        self.assertTrue(friend["invite_applied"])
+        summary = storage.invite_summary(inviter["id"])
+        self.assertEqual(summary["invite_bonus"], 1)
+        self.assertEqual(storage.daily_ai_quota(inviter["id"]),
+                         storage.FREE_AI_CALLS_PER_DAY + storage.INVITE_BONUS_CALLS)
+        self.assertEqual(storage.daily_ai_quota(friend["id"]), storage.FREE_AI_CALLS_PER_DAY)
+
+    def test_user_ai_config_and_call_counting(self):
+        user = storage.register_user("owncfg", "password123", "owncfg@example.com")
+        self.assertIsNone(storage.get_user_ai_config(user["id"]))
+        # 站点默认模型的调用计入当日额度
+        storage.record_event(user_id=user["id"], event_type="ai_chat", metadata={"own_config": False})
+        storage.record_event(user_id=user["id"], event_type="ai_classify", metadata={})
+        self.assertEqual(storage.count_ai_calls_today(user["id"]), 2)
+        # 用户自有 Key 的调用不计入
+        storage.record_event(user_id=user["id"], event_type="ai_chat", metadata={"own_config": True})
+        self.assertEqual(storage.count_ai_calls_today(user["id"]), 2)
+        # 配置保存/读取/清除
+        storage.save_user_ai_config(user["id"], {
+            "base_url": "https://example.com/v1", "api_key": "sk-abc123", "model": "glm-4"})
+        cfg = storage.get_user_ai_config(user["id"])
+        self.assertEqual(cfg["model"], "glm-4")
+        self.assertEqual(cfg["api_key"], "sk-abc123")
+        storage.save_user_ai_config(user["id"], None)
+        self.assertIsNone(storage.get_user_ai_config(user["id"]))
+
     def test_import_markdown_content_dedupes_and_parses_frontmatter(self):
         user = storage.register_user("importer", "password123", "importer@example.com")
         md = (

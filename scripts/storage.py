@@ -21,6 +21,8 @@ DB_PATH = os.environ.get("SQL_WRONGBOOK_DB", os.path.join(DATA_DIR, "sql_review.
 QUIZ_DIR = os.path.join(ROOT, "错题库")
 SESSION_DAYS = 30
 SESSION_RENEW_THRESHOLD_DAYS = SESSION_DAYS // 2  # 剩余不足一半时滑动续期
+FREE_AI_CALLS_PER_DAY = 3      # 使用站点默认模型时，每用户每日免费次数
+INVITE_BONUS_CALLS = 10        # 每邀请 1 位新用户，邀请人每日免费额度永久 +10
 PBKDF2_ITERATIONS = 240_000
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$")
 
@@ -179,6 +181,23 @@ def init_db():
             """
         )
         user_columns = {row[1] for row in db.execute("PRAGMA table_info(users)")}
+        for col, ddl in (
+            ("invite_code", "TEXT NOT NULL DEFAULT ''"),
+            ("invite_bonus", "INTEGER NOT NULL DEFAULT 0"),
+            ("invited_by", "TEXT"),
+            ("ai_config", "TEXT NOT NULL DEFAULT ''"),
+        ):
+            if col not in user_columns:
+                db.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
+        # 为存量用户补生成邀请码（去掉易混淆字符的 8 位大写码）
+        for (uid,) in db.execute(
+            "SELECT id FROM users WHERE invite_code='' OR invite_code IS NULL"
+        ).fetchall():
+            while True:
+                code = "".join(secrets.choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(8))
+                if not db.execute("SELECT 1 FROM users WHERE invite_code=?", (code,)).fetchone():
+                    break
+            db.execute("UPDATE users SET invite_code=? WHERE id=?", (code, uid))
         session_columns = {row[1] for row in db.execute("PRAGMA table_info(sessions)")}
         if "persistent" not in session_columns:
             # 旧库默认视为持久会话，保持升级前的自动登录行为
@@ -206,7 +225,7 @@ def _password_digest(password, salt_hex):
     ).hex()
 
 
-def register_user(username, password, email):
+def register_user(username, password, email, invite_code=None):
     username = str(username or "").strip()
     username_norm = username.casefold()
     email = str(email or "").strip()
@@ -227,18 +246,35 @@ def register_user(username, password, email):
         first_user = db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
         if db.execute("SELECT 1 FROM users WHERE email_norm=?", (email_norm,)).fetchone():
             raise ValueError("该邮箱已被注册。")
+        inviter_id = None
+        code = str(invite_code or "").strip().upper()
+        if code:
+            inviter = db.execute(
+                "SELECT id FROM users WHERE invite_code=?", (code,)
+            ).fetchone()
+            if inviter:
+                inviter_id = inviter["id"]
+        while True:
+            my_code = "".join(secrets.choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(8))
+            if not db.execute("SELECT 1 FROM users WHERE invite_code=?", (my_code,)).fetchone():
+                break
         try:
             db.execute(
-                "INSERT INTO users(id,username,username_norm,email,email_norm,password_salt,password_hash,is_admin,created_at,updated_at) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO users(id,username,username_norm,email,email_norm,password_salt,password_hash,"
+                "is_admin,created_at,updated_at,invite_code,invited_by) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                 (user_id, username, username_norm, email, email_norm, salt,
-                 _password_digest(password, salt), 1 if first_user else 0, now, now),
+                 _password_digest(password, salt), 1 if first_user else 0, now, now,
+                 my_code, inviter_id),
             )
         except sqlite3.IntegrityError as exc:
             raise ValueError("该账号已存在。") from exc
+        if inviter_id:  # 邀请成功：邀请人每日免费额度永久 +10
+            db.execute("UPDATE users SET invite_bonus=invite_bonus+1 WHERE id=?", (inviter_id,))
     imported = import_legacy_questions(user_id) if first_user else 0
     return {"id": user_id, "username": username, "email": email,
-            "is_admin": first_user, "imported": imported}
+            "is_admin": first_user, "imported": imported,
+            "invite_code": my_code, "invite_applied": bool(inviter_id)}
 
 
 def email_registered(email_norm):
@@ -260,6 +296,72 @@ def user_by_email(email):
         return None
     return {"id": row["id"], "username": row["username"], "email": row["email"],
             "is_admin": bool(row["is_admin"])}
+
+
+# ---- 用户级 AI 配置与每日免费额度 ----
+
+def get_user_ai_config(user_id):
+    """读取用户自己的 AI 配置；未配置或字段不全返回 None。"""
+    with connect() as db:
+        row = db.execute("SELECT ai_config FROM users WHERE id=?", (user_id,)).fetchone()
+    if not row or not row["ai_config"]:
+        return None
+    try:
+        cfg = json.loads(row["ai_config"])
+    except ValueError:
+        return None
+    if not (str(cfg.get("api_key") or "").strip() and str(cfg.get("model") or "").strip()):
+        return None
+    return {
+        "base_url": str(cfg.get("base_url") or "").strip(),
+        "api_key": str(cfg.get("api_key") or "").strip(),
+        "model": str(cfg.get("model") or "").strip(),
+    }
+
+
+def save_user_ai_config(user_id, cfg):
+    """保存用户自己的 AI 配置；cfg 为 None 时清除（恢复使用站点默认）。"""
+    payload = json.dumps(cfg, ensure_ascii=False) if cfg else ""
+    with connect() as db:
+        db.execute("UPDATE users SET ai_config=? WHERE id=?", (payload, user_id))
+
+
+def daily_ai_quota(user_id):
+    """每日免费次数 = 3 + 10 × 已邀请人数。"""
+    with connect() as db:
+        row = db.execute("SELECT invite_bonus FROM users WHERE id=?", (user_id,)).fetchone()
+    bonus = int(row["invite_bonus"] or 0) if row else 0
+    return FREE_AI_CALLS_PER_DAY + INVITE_BONUS_CALLS * bonus
+
+
+def count_ai_calls_today(user_id):
+    """统计今日通过站点默认模型发起的 AI 调用次数（用户自有 Key 的调用不计入）。
+
+    created_at 存的是 UTC；以「本地日历日零点对应的 UTC 时刻」为起点，
+    保证配额按用户本地日期重置。
+    """
+    local_midnight = (dt.datetime.now().astimezone()
+                      .replace(hour=0, minute=0, second=0, microsecond=0)
+                      .astimezone(dt.timezone.utc))
+    cutoff = local_midnight.isoformat().replace("+00:00", "Z")
+    with connect() as db:
+        row = db.execute(
+            "SELECT COUNT(*) FROM user_events WHERE user_id=? AND event_type LIKE 'ai_%' "
+            "AND created_at>=? AND COALESCE(json_extract(metadata,'$.own_config'),0)=0",
+            (user_id, cutoff),
+        ).fetchone()
+    return int(row[0])
+
+
+def invite_summary(user_id):
+    with connect() as db:
+        row = db.execute(
+            "SELECT invite_code, invite_bonus, invited_by FROM users WHERE id=?", (user_id,)
+        ).fetchone()
+    if not row:
+        return {"invite_code": "", "invite_bonus": 0}
+    return {"invite_code": row["invite_code"], "invite_bonus": int(row["invite_bonus"] or 0),
+            "invited_by": row["invited_by"]}
 
 
 def authenticate(username, password):

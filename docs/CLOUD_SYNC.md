@@ -40,9 +40,24 @@
 - `GET /api/auth/register_config`（公开）：返回 `{"email_code_required": bool, "email_code_login_available": bool, "will_import_local": bool, "code_ttl_minutes": 10, "resend_interval_seconds": 60}`。`email_code_required` 为 true 时注册必须携带验证码；`email_code_login_available` 为 true 时支持验证码登录；`will_import_local` 仅在「站点还没有任何账号且 `错题库/` 下有 Markdown」时为 true。
 - `POST /api/auth/send_code`（公开）：`{"email": "name@example.com", "purpose": "register" | "login"}`（默认 register）。register 用途要求邮箱未被注册（已注册返回 400 `EMAIL_TAKEN`）；login 用途要求邮箱已注册（未注册返回 404 `EMAIL_NOT_FOUND`）。验证码 10 分钟内有效，同一邮箱同一用途 60 秒内只能重发一次，每小时最多发送 5 次；连续错误 5 次后作废，必须重新获取。服务端只保存验证码哈希，且注册码与登录码按用途隔离、不可混用。
 - `POST /api/auth/login` 支持两种方式：账号密码（`username` + `password`）或邮箱验证码（`email` + `email_code`，验证 purpose 为 login 的验证码，无需密码）。
-- `POST /api/auth/register`：启用验证码时 `email_code` 必填，校验通过才能创建账号。
+- `POST /api/auth/register`：启用验证码时 `email_code` 必填，校验通过才能创建账号；可选 `invite_code` 为邀请人注册码，成功后邀请人每日免费 AI 额度永久 +10。
 
 邮件服务通过 `config/email_config.json` 配置（参考 `config/email_config.example.json`），管理员也可在网页设置弹窗中配置并「发送测试邮件」。文件未配置或 `enabled=false` 时自动降级：注册不需要验证码、登录仅支持密码方式。
+
+## AI 免费额度、邀请奖励与用户自有配置
+
+AI 组件（对话 / 图片识别归类 / 错题修正）默认使用站点默认模型（管理员在设置中配置，当前为 qwen-vl-max）。普通账号使用站点默认模型时受每日免费额度限制：
+
+- 每日免费次数 = `3 + 10 × 已邀请人数`，按用户本地日历日重置；仅统计成功的调用，用户自有 Key 的调用与管理员调用不计数。
+- 超出额度返回 429 `AI_QUOTA_EXCEEDED`。解除方式：在「我的」页配置自己的 AI Key（不限次数），或邀请新用户注册。
+- 邀请码：每个账号注册时自动生成 8 位邀请码；新用户注册时提交 `invite_code`，校验通过后邀请人 `invite_bonus` +1。无效邀请码被忽略，不影响注册。
+
+相关接口（均需登录）：
+
+- `GET /api/ai_quota`：返回 `{base_free, invite_bonus, daily_total, used_today, remaining, invite_code, using_own_config, site_model, is_admin}`。
+- `GET /api/my_ai_config`：返回用户自己的 AI 配置（`{configured, base_url, model, api_key_tail}`，Key 只返回末 4 位）。
+- `POST /api/my_ai_config`：`{base_url, api_key, model}` 保存（Key 留空沿用已保存值；base_url/model/api_key 齐全才算配置生效），或 `{action: "clear"}` 清除恢复站点默认。
+- `POST /api/test`：对所有登录用户开放，用于测试自己的 AI 配置连通性（不落盘）；站点级 `/api/config` 仍仅管理员可改。
 
 ### 拉取增量
 

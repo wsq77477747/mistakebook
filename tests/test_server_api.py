@@ -280,6 +280,61 @@ class ServerApiTests(unittest.TestCase):
         self.assertEqual(self._session_expiry(volatile_token), written)
         self.assertNotIn("Max-Age", headers.get("Set-Cookie", "") or "")
 
+    # 命名以 user_ 开头：字母序排在 test_auth 之后执行，避免抢占「首个注册用户=管理员」的测试前提
+    def test_user_quota_invite_and_own_config(self):
+        orig_call = server._call_llm
+        server._call_llm = lambda cfg, messages, **kw: "ok"
+        try:
+            inviter = server.storage.register_user("quota-user", "password123", "quota-user@example.com")
+            client = urllib.request.build_opener(
+                urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+            status, _ = self.request("/api/auth/login",
+                                     {"username": "quota-user", "password": "password123"}, client=client)
+            self.assertEqual(status, 200)
+            status, q = self.request("/api/ai_quota", client=client)
+            self.assertEqual(status, 200)
+            self.assertEqual(q["daily_total"], q["base_free"])  # 无邀请：每日 3 次
+            self.assertTrue(q["invite_code"])
+            # 用满免费额度
+            chat = {"messages": [{"role": "user", "content": "hi"}]}
+            for _ in range(q["base_free"]):
+                status, resp = self.request("/api/chat", chat, client=client)
+                self.assertEqual(status, 200)
+            status, err = self.request("/api/chat", chat, client=client)
+            self.assertEqual(status, 429)
+            self.assertEqual(err["error"], "AI_QUOTA_EXCEEDED")
+            # 新用户使用邀请码注册 → 邀请人每日额度 +10，可继续调用
+            friend = server.storage.register_user("quota-friend", "password123",
+                                                  "quota-friend@example.com",
+                                                  invite_code=inviter["invite_code"])
+            self.assertTrue(friend["invite_applied"])
+            status, q2 = self.request("/api/ai_quota", client=client)
+            self.assertEqual(q2["daily_total"], q2["base_free"] + 10 * q2["invite_bonus"])
+            self.assertEqual(q2["invite_bonus"], 1)
+            status, resp = self.request("/api/chat", chat, client=client)
+            self.assertEqual(status, 200)
+            # 配置自己的 Key 后不再受额度限制，且不计入用量
+            status, saved = self.request("/api/my_ai_config", {
+                "base_url": "https://example.com/v1", "api_key": "sk-mykey", "model": "glm-4"},
+                client=client)
+            self.assertEqual(status, 200)
+            self.assertTrue(saved["configured"])
+            status, q3 = self.request("/api/ai_quota", client=client)
+            self.assertTrue(q3["using_own_config"])
+            status, resp = self.request("/api/chat", chat, client=client)
+            self.assertEqual(status, 200)
+            status, q4 = self.request("/api/ai_quota", client=client)
+            # q2→q4 之间：配额内的邀请后调用 +1，自有 Key 调用不计入
+            self.assertEqual(q4["used_today"], q2["used_today"] + 1)
+            # 清除配置后恢复受限
+            status, _ = self.request("/api/my_ai_config", {"action": "clear"}, client=client)
+            status, q5 = self.request("/api/ai_quota", client=client)
+            self.assertFalse(q5["using_own_config"])
+            status, resp = self.request("/api/chat", chat, client=client)
+            self.assertEqual(status, 200)  # 额度内还有剩余（13-4=9）
+        finally:
+            server._call_llm = orig_call
+
     def test_email_code_flow_when_enabled(self):
         import mailer
         orig_required, orig_send = mailer.register_code_required, mailer.send_verification_code

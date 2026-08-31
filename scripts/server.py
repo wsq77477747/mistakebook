@@ -230,10 +230,9 @@ def _decode_data_url(s):
         return None, None
 
 
-def _call_llm(messages, temperature=0.3, retries=3, base_delay=2.0, max_tokens=None, json_mode=False):
-    """转发对话给 OpenAI 兼容 LLM，返回 content 字符串。
-    遇到 429（访问量过大/限流）或 5xx 时按退避自动重试，最多 retries 次。"""
-    cfg = load_config()
+def _call_llm(cfg, messages, temperature=0.3, retries=3, base_delay=2.0, max_tokens=None, json_mode=False):
+    """转发对话给 OpenAI 兼容 LLM，返回 content 字符串。cfg 为实际使用的配置
+    （站点默认或用户自有）。遇到 429（访问量过大/限流）或 5xx 时按退避自动重试，最多 retries 次。"""
     url = _llm_endpoint(cfg)
     payload = {
         "model": cfg["model"],
@@ -393,6 +392,76 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, fmt, *args):
         sys.stdout.write("[server] " + fmt % args + "\n")
 
+    # ---- AI 配置与每日免费额度 ----
+    def _effective_ai_config(self):
+        """返回 (cfg, own)：用户自有配置优先；否则使用站点默认（管理员提供）。"""
+        own = storage.get_user_ai_config(self.user["id"])
+        if own:
+            return own, True
+        return load_config(), False
+
+    def _reject_over_quota(self, own_cfg):
+        """使用站点默认模型的普通用户受每日免费额度限制（管理员与自有 Key 不受限）。
+
+        返回 True 表示已向客户端发送 429 响应，调用方应立即 return。
+        """
+        if own_cfg or self.user.get("is_admin"):
+            return False
+        used = storage.count_ai_calls_today(self.user["id"])
+        total = storage.daily_ai_quota(self.user["id"])
+        if used >= total:
+            self._send_json(429, {
+                "error": "AI_QUOTA_EXCEEDED",
+                "message": "今日免费次数已用完（%d/%d 次）。可在「我的」页配置自己的 AI Key 解除限制，"
+                           "或邀请新用户注册（每位 +10 次/日）。" % (used, total),
+            })
+            return True
+        return False
+
+    def _ai_quota(self):
+        uid = self.user["id"]
+        summary = storage.invite_summary(uid)
+        total = storage.daily_ai_quota(uid)
+        used = storage.count_ai_calls_today(uid)
+        return self._send_json(200, {
+            "base_free": storage.FREE_AI_CALLS_PER_DAY,
+            "invite_bonus": summary["invite_bonus"],
+            "daily_total": total,
+            "used_today": used,
+            "remaining": max(0, total - used),
+            "invite_code": summary["invite_code"],
+            "using_own_config": storage.get_user_ai_config(uid) is not None,
+            "site_model": load_config().get("model") or "",
+            "is_admin": bool(self.user.get("is_admin")),
+        })
+
+    def _my_ai_config_view(self):
+        cfg = storage.get_user_ai_config(self.user["id"])
+        if not cfg:
+            return {"configured": False, "base_url": "", "model": "", "api_key_tail": ""}
+        return {"configured": True, "base_url": cfg["base_url"], "model": cfg["model"],
+                "api_key_tail": cfg["api_key"][-4:]}
+
+    def _save_my_ai_config(self):
+        body = self._read_body()
+        if body.get("action") == "clear":
+            storage.save_user_ai_config(self.user["id"], None)
+            return self._send_json(200, {"ok": True, **self._my_ai_config_view()})
+        cfg = {
+            "base_url": (body.get("base_url") or DEFAULT_BASE).strip(),
+            "api_key": (body.get("api_key") or "").strip(),
+            "model": (body.get("model") or "").strip(),
+        }
+        if not cfg["api_key"]:  # Key 留空沿用已保存的
+            existing = storage.get_user_ai_config(self.user["id"])
+            if existing:
+                cfg["api_key"] = existing["api_key"]
+        if not cfg["api_key"] or not cfg["model"]:
+            return self._send_json(400, {"error": "INCOMPLETE",
+                                         "message": "请填写 API Key 和模型名（Key 留空则沿用已保存的）。"})
+        storage.save_user_ai_config(self.user["id"], cfg)
+        return self._send_json(200, {"ok": True, **self._my_ai_config_view()})
+
     # ---- 路由 ----
     def do_GET(self):
         path = self.path.split("?")[0]
@@ -429,6 +498,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._send_json(200, storage.sync_pull(self.user["id"], args.get("since", [0])[0], args.get("limit", [500])[0]))
         if path == "/api/config":
             return self._get_config()
+        if path == "/api/ai_quota":
+            return self._ai_quota()
+        if path == "/api/my_ai_config":
+            return self._send_json(200, self._my_ai_config_view())
         if path == "/api/email/config":
             if not self.user.get("is_admin"):
                 return self._send_json(403, {"error": "ADMIN_REQUIRED", "message": "只有站点管理员可以查看邮件配置。"})
@@ -471,8 +544,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._send_json(200, storage.sync_push(self.user["id"], body.get("records") or []))
         if path == "/api/import_batch":
             return self._import_batch()
-        if path in {"/api/config", "/api/test"} and not self.user.get("is_admin"):
-            return self._send_json(403, {"error": "ADMIN_REQUIRED", "message": "只有站点管理员可以修改 AI 配置。"})
+        if path == "/api/my_ai_config":
+            return self._save_my_ai_config()
+        if path == "/api/config" and not self.user.get("is_admin"):
+            return self._send_json(403, {"error": "ADMIN_REQUIRED", "message": "只有站点管理员可以修改站点 AI 配置。"})
         if path in {"/api/email/config", "/api/email/test"} and not self.user.get("is_admin"):
             return self._send_json(403, {"error": "ADMIN_REQUIRED", "message": "只有站点管理员可以修改邮件配置。"})
         if path == "/api/config":
@@ -510,13 +585,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     return self._send_json(400, {"error": "EMAIL_CODE_REQUIRED",
                                                  "message": "请先获取邮箱验证码并填写后再注册。"})
                 storage.verify_email_code(email, code, purpose="register")
-            user = storage.register_user(body.get("username"), body.get("password"), email)
+            user = storage.register_user(body.get("username"), body.get("password"), email,
+                                         invite_code=body.get("invite_code"))
             remember = bool(body.get("remember_me", True))
             token = storage.create_session(user["id"], persistent=remember)
             response = {"ok": True,
                         "user": {"id": user["id"], "username": user["username"], "email": user["email"],
                                  "is_admin": user["is_admin"]},
-                        "imported": user["imported"]}
+                        "imported": user["imported"],
+                        "invite_applied": bool(user.get("invite_applied"))}
             if body.get("client_type") == "mini_program":
                 response["session_token"] = token
             self._send_auth(201, response, token=token, remember=remember)
@@ -865,7 +942,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     # ---- AI 对话 ----
     def _chat(self):
         body = self._read_body()
-        cfg = load_config()
+        cfg, own = self._effective_ai_config()
+        if self._reject_over_quota(own):
+            return
         if not cfg.get("api_key"):
             return self._send_json(400, {"error": "NOT_CONFIGURED",
                                          "message": "尚未配置 API Key，请在 AI 助手设置中填写。"})
@@ -880,9 +959,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not has_system:
             messages.insert(0, {"role": "system", "content": "你是SQL错题本AI助手。回答务必简洁直接、要点式，不超过3句话，不要寒暄、不要重复用户问题、不要多余解释。能用一句话说清就不用两句。"})
         try:
-            reply = _call_llm(messages)
+            reply = _call_llm(cfg, messages)
             self._send_json(200, {"reply": reply})
-            self._track_event("ai_chat", metadata={"msg_count": len(messages)})
+            self._track_event("ai_chat", metadata={"msg_count": len(messages), "own_config": own})
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", "replace")[:500]
             self._send_json(e.code, {"error": "LLM_API_ERROR", "message": f"LLM 返回 {e.code}: {detail}"})
@@ -892,7 +971,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     # ---- AI 自动整理归类（不落盘，返回预览） ----
     def _classify(self):
         body = self._read_body()
-        cfg = load_config()
+        cfg, own = self._effective_ai_config()
+        if self._reject_over_quota(own):
+            return
         if not cfg.get("api_key"):
             return self._send_json(400, {"error": "NOT_CONFIGURED",
                                          "message": "尚未配置 API Key，请在 AI 助手设置中填写。"})
@@ -917,7 +998,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 ]
             else:
                 user_content = raw
-            content = _call_llm([
+            content = _call_llm(cfg, [
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": user_content},
             ], temperature=0.2, max_tokens=6000)
@@ -936,7 +1017,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             result.setdefault("summary", "")
             result.setdefault("body_md", "")
             self._send_json(200, {"result": result})
-            self._track_event("ai_classify", metadata={"has_image": bool(image), "cat": result.get("cat", "")[:30]})
+            self._track_event("ai_classify", metadata={"has_image": bool(image), "cat": result.get("cat", "")[:30], "own_config": own})
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", "replace")[:500]
             self._send_json(e.code, {"error": "LLM_API_ERROR", "message": f"LLM 返回 {e.code}: {detail}"})
@@ -993,7 +1074,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     # ---- AI修正错题（多轮对话，不落盘） ----
     def _ai_revise(self):
         body = self._read_body()
-        cfg = load_config()
+        cfg, own = self._effective_ai_config()
+        if self._reject_over_quota(own):
+            return
         if not cfg.get("api_key"):
             return self._send_json(400, {"error": "NOT_CONFIGURED", "message": "尚未配置 API Key。"})
         if not cfg.get("model"):
@@ -1045,7 +1128,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         messages.append({"role": "user", "content": current_user_msg})
 
         try:
-            content = _call_llm(messages, temperature=0.3, max_tokens=6000)
+            content = _call_llm(cfg, messages, temperature=0.3, max_tokens=6000)
             result = _extract_json(content)
             new_meta = result.get("meta") or {}
             new_body = (result.get("body_md") or "").strip()
@@ -1056,7 +1139,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             for k in ["题号","标题","知识点","难度","日期","来源","错误类型","状态","做错次数","重错日期","一句话总结"]:
                 if not str(new_meta.get(k, "") or "").strip():
                     new_meta[k] = str(meta.get(k, "") or "")
-            self._track_event("ai_revise", metadata={"question_id": str(body.get("file") or body.get("id") or "")[:36]})
+            self._track_event("ai_revise", metadata={"question_id": str(body.get("file") or body.get("id") or "")[:36], "own_config": own})
             return self._send_json(200, {"ok": True, "reply": reply, "meta": new_meta, "body": new_body})
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", "replace")[:500]
