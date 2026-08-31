@@ -7,6 +7,7 @@ import unittest
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FIXTURE_QUIZ_DIR = os.path.join(ROOT, "tests", "fixtures", "legacy_questions")
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 
 import storage
@@ -15,11 +16,18 @@ import storage
 class StorageTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
+        self.original_db_path = storage.DB_PATH
+        self.original_quiz_dir = storage.QUIZ_DIR
+        self.original_pbkdf2_iterations = storage.PBKDF2_ITERATIONS
         storage.DB_PATH = os.path.join(self.tmp.name, "test.db")
+        storage.QUIZ_DIR = FIXTURE_QUIZ_DIR
         storage.PBKDF2_ITERATIONS = 1_000
         storage.init_db()
 
     def tearDown(self):
+        storage.DB_PATH = self.original_db_path
+        storage.QUIZ_DIR = self.original_quiz_dir
+        storage.PBKDF2_ITERATIONS = self.original_pbkdf2_iterations
         self.tmp.cleanup()
 
     def test_accounts_are_isolated_and_first_account_imports_legacy(self):

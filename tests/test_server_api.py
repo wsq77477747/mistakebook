@@ -16,6 +16,7 @@ import urllib.request
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FIXTURE_QUIZ_DIR = os.path.join(ROOT, "tests", "fixtures", "legacy_questions")
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 
 import server
@@ -25,7 +26,11 @@ class ServerApiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
+        cls.original_db_path = server.storage.DB_PATH
+        cls.original_quiz_dir = server.storage.QUIZ_DIR
+        cls.original_pbkdf2_iterations = server.storage.PBKDF2_ITERATIONS
         server.storage.DB_PATH = os.path.join(cls.tmp.name, "api.db")
+        server.storage.QUIZ_DIR = FIXTURE_QUIZ_DIR
         server.storage.PBKDF2_ITERATIONS = 1_000
         server.storage.init_db()
         cls.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
@@ -38,6 +43,9 @@ class ServerApiTests(unittest.TestCase):
         cls.httpd.shutdown()
         cls.httpd.server_close()
         cls.thread.join(timeout=3)
+        server.storage.DB_PATH = cls.original_db_path
+        server.storage.QUIZ_DIR = cls.original_quiz_dir
+        server.storage.PBKDF2_ITERATIONS = cls.original_pbkdf2_iterations
         cls.tmp.cleanup()
 
     def setUp(self):
