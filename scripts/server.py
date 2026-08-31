@@ -963,8 +963,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             messages.insert(0, {"role": "system", "content": "你是SQL错题本AI助手。回答务必简洁直接、要点式，不超过3句话，不要寒暄、不要重复用户问题、不要多余解释。能用一句话说清就不用两句。"})
         try:
             reply = _call_llm(cfg, messages)
-            self._send_json(200, {"reply": reply})
             self._track_event("ai_chat", metadata={"msg_count": len(messages), "own_config": own})
+            self._send_json(200, {"reply": reply})
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", "replace")[:500]
             self._send_json(e.code, {"error": "LLM_API_ERROR", "message": f"LLM 返回 {e.code}: {detail}"})
@@ -1019,8 +1019,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             result.setdefault("redates", [result.get("date")] if result.get("date") else [])
             result.setdefault("summary", "")
             result.setdefault("body_md", "")
-            self._send_json(200, {"result": result})
             self._track_event("ai_classify", metadata={"has_image": bool(image), "cat": result.get("cat", "")[:30], "own_config": own})
+            self._send_json(200, {"result": result})
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", "replace")[:500]
             self._send_json(e.code, {"error": "LLM_API_ERROR", "message": f"LLM 返回 {e.code}: {detail}"})
