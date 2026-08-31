@@ -192,6 +192,55 @@ class ServerApiTests(unittest.TestCase):
         self.assertIn("will_import_local", cfg)
         self.assertFalse(cfg["will_import_local"])  # 测试库中已存在账号
 
+    def test_email_code_login_flow(self):
+        import mailer
+        orig_required, orig_send = mailer.register_code_required, mailer.send_verification_code
+        orig_configured = mailer.smtp_configured
+        sent = {}
+        mailer.register_code_required = lambda: True
+        mailer.smtp_configured = lambda: True
+
+        def fake_send(to, code, ttl_minutes=10):
+            sent.setdefault("codes", {})[to] = code
+
+        mailer.send_verification_code = fake_send
+        try:
+            status, cfg = self.request("/api/auth/register_config")
+            self.assertTrue(cfg["email_code_login_available"])
+            server.storage.register_user("codelogin", "password123", "codelogin@example.com")
+            jar = http.cookiejar.CookieJar()
+            client = urllib.request.build_opener(
+                urllib.request.HTTPCookieProcessor(jar))
+            # 未注册邮箱请求登录验证码 → 404
+            status, err = self.request(
+                "/api/auth/send_code", {"email": "ghost@example.com", "purpose": "login"})
+            self.assertEqual(status, 404)
+            # 已注册邮箱：注册用途发码被拒，登录用途发码成功
+            status, err = self.request(
+                "/api/auth/send_code", {"email": "codelogin@example.com", "purpose": "register"})
+            self.assertEqual(status, 400)
+            status, resp = self.request(
+                "/api/auth/send_code", {"email": "codelogin@example.com", "purpose": "login"})
+            self.assertEqual(status, 200)
+            code = sent["codes"]["codelogin@example.com"]
+            # 错误验证码 → 401；正确验证码 → 登录成功并建立会话
+            status, err = self.request(
+                "/api/auth/login", {"email": "codelogin@example.com", "email_code": "000000",
+                                    "remember_me": False})
+            self.assertEqual(status, 401)
+            status, login = self.request(
+                "/api/auth/login", {"email": "codelogin@example.com", "email_code": code},
+                client=client)
+            self.assertEqual(status, 200, "login failed: %s" % json.dumps(err, ensure_ascii=False))
+            self.assertEqual(login["user"]["username"], "codelogin")
+            status, me = self.request("/api/auth/me", client=client)
+            self.assertTrue(me["authenticated"])
+            status, listing = self.request("/api/questions", client=client)
+            self.assertEqual(status, 200)
+        finally:
+            mailer.register_code_required, mailer.send_verification_code = orig_required, orig_send
+            mailer.smtp_configured = orig_configured
+
     def test_login_remember_me_controls_cookie_lifetime(self):
         server.storage.register_user("remember-user", "password123", "remember-user@example.com")
         client = urllib.request.build_opener(

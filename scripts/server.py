@@ -408,6 +408,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path == "/api/auth/register_config":
             return self._send_json(200, {
                 "email_code_required": mailer.register_code_required(),
+                "email_code_login_available": mailer.smtp_configured(),
                 "will_import_local": storage.legacy_questions_available(),
                 "code_ttl_minutes": storage.EMAIL_CODE_TTL_MINUTES,
                 "resend_interval_seconds": storage.EMAIL_CODE_RESEND_SECONDS,
@@ -525,19 +526,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def _send_code(self):
         body = self._read_body()
+        purpose = "login" if body.get("purpose") == "login" else "register"
         email = str(body.get("email") or "").strip()
         if not storage.EMAIL_RE.match(email) or len(email) > 254:
             return self._send_json(400, {"error": "INVALID_EMAIL",
                                          "message": "邮箱格式不正确，请填写形如 name@example.com 的地址。"})
         if not mailer.register_code_required():
             return self._send_json(503, {"error": "EMAIL_NOT_CONFIGURED",
-                                         "message": "邮件服务尚未配置，暂时无需验证码即可注册。"})
+                                         "message": "邮件服务尚未配置，暂时无法发送验证码。"})
         email_norm = email.casefold()
-        if storage.email_registered(email_norm):
+        registered = storage.email_registered(email_norm)
+        if purpose == "register" and registered:
             return self._send_json(400, {"error": "EMAIL_TAKEN", "message": "该邮箱已被注册，请直接登录。"})
+        if purpose == "login" and not registered:
+            return self._send_json(404, {"error": "EMAIL_NOT_FOUND",
+                                         "message": "该邮箱尚未注册，请先创建账号。"})
         try:
             code, expires = storage.create_email_code(
-                email, purpose="register",
+                email, purpose=purpose,
                 ip=self.headers.get("X-Forwarded-For", self.client_address[0] if self.client_address else ""))
         except ValueError as exc:
             return self._send_json(429, {"error": "CODE_RATE_LIMITED", "message": str(exc)})
@@ -545,23 +551,36 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             mailer.send_verification_code(email, code, storage.EMAIL_CODE_TTL_MINUTES)
         except Exception as e:
             return self._send_json(502, {"error": "SEND_FAIL", "message": "验证码邮件发送失败：%s" % e})
-        self._track_event("send_code", page="/api/auth/send_code", metadata={"domain": email_norm.split("@")[-1][:50]})
+        self._track_event("send_code", page="/api/auth/send_code",
+                          metadata={"purpose": purpose, "domain": email_norm.split("@")[-1][:50]})
         return self._send_json(200, {"ok": True, "expires_at": expires,
                                      "ttl_minutes": storage.EMAIL_CODE_TTL_MINUTES,
                                      "resend_interval_seconds": storage.EMAIL_CODE_RESEND_SECONDS})
 
     def _login(self):
         body = self._read_body()
-        user = storage.authenticate(body.get("username"), body.get("password"))
-        if not user:
-            return self._send_json(401, {"error": "LOGIN_FAILED", "message": "账号或密码不正确。"})
         remember = bool(body.get("remember_me", True))
+        email = str(body.get("email") or "").strip()
+        code = str(body.get("email_code") or "").strip()
+        if code:
+            # 邮箱验证码登录：无需密码
+            try:
+                storage.verify_email_code(email, code, purpose="login")
+            except ValueError as exc:
+                return self._send_json(401, {"error": "LOGIN_FAILED", "message": str(exc)})
+            user = storage.user_by_email(email)
+            if not user:
+                return self._send_json(401, {"error": "LOGIN_FAILED", "message": "该邮箱尚未注册。"})
+        else:
+            user = storage.authenticate(body.get("username"), body.get("password"))
+            if not user:
+                return self._send_json(401, {"error": "LOGIN_FAILED", "message": "账号或密码不正确。"})
         token = storage.create_session(user["id"], persistent=remember)
         response = {"ok": True, "user": user}
         if body.get("client_type") == "mini_program":
             response["session_token"] = token
         self._send_auth(200, response, token=token, remember=remember)
-        self._track_event("login", metadata={"username": body.get("username", "")[:50]})
+        self._track_event("login", metadata={"username": user["username"][:50], "method": "email_code" if code else "password"})
 
     def _logout(self):
         self._track_event("logout")

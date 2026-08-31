@@ -247,6 +247,21 @@ def email_registered(email_norm):
     return bool(row)
 
 
+def user_by_email(email):
+    """按邮箱查用户（大小写不敏感）；不存在返回 None。"""
+    email_norm = str(email or "").strip().casefold()
+    if not email_norm:
+        return None
+    with connect() as db:
+        row = db.execute(
+            "SELECT * FROM users WHERE email_norm!='' AND email_norm=?", (email_norm,)
+        ).fetchone()
+    if not row:
+        return None
+    return {"id": row["id"], "username": row["username"], "email": row["email"],
+            "is_admin": bool(row["is_admin"])}
+
+
 def authenticate(username, password):
     identifier = str(username or "").strip().casefold()
     with connect() as db:

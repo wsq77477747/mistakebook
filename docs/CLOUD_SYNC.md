@@ -35,13 +35,14 @@
 
 ## 注册邮箱验证码
 
-验证码流程只服务于注册，登录和同步协议不受影响。是否需要验证码由服务端配置决定：
+验证码流程服务于注册和免密登录，登录和同步协议不受影响。是否可用由服务端配置决定：
 
-- `GET /api/auth/register_config`（公开）：返回 `{"email_code_required": bool, "code_ttl_minutes": 10, "resend_interval_seconds": 60}`。客户端应在展示注册表单时读取一次，`email_code_required=false` 时不显示验证码输入框。
-- `POST /api/auth/send_code`（公开）：`{"email": "name@example.com"}`，向该邮箱发送 6 位验证码。验证码 10 分钟内有效，同一邮箱 60 秒内只能重发一次，每小时最多发送 5 次；验证码校验连续错误 5 次后作废，必须重新获取。服务端只保存验证码哈希。已注册的邮箱会返回 400 `EMAIL_TAKEN`；发送成功返回 `{"ok": true, "expires_at": ...}`。
+- `GET /api/auth/register_config`（公开）：返回 `{"email_code_required": bool, "email_code_login_available": bool, "will_import_local": bool, "code_ttl_minutes": 10, "resend_interval_seconds": 60}`。`email_code_required` 为 true 时注册必须携带验证码；`email_code_login_available` 为 true 时支持验证码登录；`will_import_local` 仅在「站点还没有任何账号且 `错题库/` 下有 Markdown」时为 true。
+- `POST /api/auth/send_code`（公开）：`{"email": "name@example.com", "purpose": "register" | "login"}`（默认 register）。register 用途要求邮箱未被注册（已注册返回 400 `EMAIL_TAKEN`）；login 用途要求邮箱已注册（未注册返回 404 `EMAIL_NOT_FOUND`）。验证码 10 分钟内有效，同一邮箱同一用途 60 秒内只能重发一次，每小时最多发送 5 次；连续错误 5 次后作废，必须重新获取。服务端只保存验证码哈希，且注册码与登录码按用途隔离、不可混用。
+- `POST /api/auth/login` 支持两种方式：账号密码（`username` + `password`）或邮箱验证码（`email` + `email_code`，验证 purpose 为 login 的验证码，无需密码）。
 - `POST /api/auth/register`：启用验证码时 `email_code` 必填，校验通过才能创建账号。
 
-邮件服务通过 `config/email_config.json` 配置（参考 `config/email_config.example.json`），管理员也可在网页设置弹窗中配置并「发送测试邮件」。文件未配置或 `enabled=false` 时自动降级为不需要验证码。
+邮件服务通过 `config/email_config.json` 配置（参考 `config/email_config.example.json`），管理员也可在网页设置弹窗中配置并「发送测试邮件」。文件未配置或 `enabled=false` 时自动降级：注册不需要验证码、登录仅支持密码方式。
 
 ### 拉取增量
 

@@ -131,6 +131,23 @@ class StorageTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             storage.verify_email_code(email, "123456")
 
+    def test_email_code_purpose_isolation(self):
+        email = "purpose@example.com"
+        code, _ = storage.create_email_code(email, purpose="register")
+        with self.assertRaises(ValueError):
+            storage.verify_email_code(email, code, purpose="login")  # 注册码不能用于登录
+        login_code, _ = storage.create_email_code(email, purpose="login")
+        self.assertTrue(storage.verify_email_code(email, login_code, purpose="login"))
+
+    def test_user_by_email_case_insensitive(self):
+        storage.register_user("byemail", "password123", "ByEmail@Example.com")
+        user = storage.user_by_email("byemail@example.com")
+        self.assertIsNotNone(user)
+        self.assertEqual(user["username"], "byemail")
+        self.assertIsNotNone(storage.user_by_email("BYEMAIL@EXAMPLE.COM"))
+        self.assertIsNone(storage.user_by_email("nobody@example.com"))
+        self.assertIsNone(storage.user_by_email(""))
+
     def test_import_markdown_content_dedupes_and_parses_frontmatter(self):
         user = storage.register_user("importer", "password123", "importer@example.com")
         md = (

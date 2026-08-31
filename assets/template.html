@@ -268,6 +268,10 @@
   .auth-state{font-size:12.5px;min-height:20px;color:var(--muted);margin-top:8px}
   .auth-remember{display:flex;align-items:center;gap:7px;font-size:13px;color:#4b5163;margin:14px 0 0;cursor:pointer}
   .auth-remember input{width:auto;margin:0;accent-color:var(--brand)}
+  .auth-mode-toggle{margin-top:10px;font-size:13px;min-height:18px}
+  .auth-mode-toggle a{color:var(--brand);cursor:pointer;text-decoration:none;font-weight:600}
+  .auth-alt{margin-top:12px;font-size:13px;color:var(--muted);text-align:center}
+  .auth-alt a{color:var(--brand);cursor:pointer;text-decoration:none;font-weight:600}
   .code-row{display:flex;gap:8px}
   .code-row input{flex:1;letter-spacing:4px}
   .code-row .btn-plain{white-space:nowrap;padding:0 14px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer}
@@ -672,23 +676,41 @@
 <div class="modal-mask" id="auth-modal" hidden>
   <div class="modal auth-box">
     <div class="auth-brand"><div class="logo">📚</div><h2>进入 SQL 错题本</h2><p>一个账号同步电脑和小程序的错题与复习进度</p></div>
-    <label>账号或邮箱</label><input id="auth-username" autocomplete="username" placeholder="至少 3 个字符">
-    <label>密码</label><input id="auth-password" type="password" autocomplete="current-password" placeholder="至少 8 个字符">
-    <div id="auth-email-row" hidden>
-      <label>邮箱（注册必填）</label><input id="auth-email" type="email" autocomplete="email" placeholder="name@example.com">
-    </div>
-    <div id="auth-code-row" hidden>
-      <label>邮箱验证码</label>
-      <div class="code-row">
-        <input id="auth-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="6 位数字">
-        <button type="button" class="btn-plain" id="auth-send-code">发送验证码</button>
+    <div id="auth-login-view">
+      <div id="auth-login-pass">
+        <label>账号或邮箱</label><input id="auth-username" autocomplete="username" placeholder="至少 3 个字符">
+        <label>密码</label><input id="auth-password" type="password" autocomplete="current-password" placeholder="至少 8 个字符">
       </div>
+      <div id="auth-login-code-view" hidden>
+        <label>邮箱</label><input id="auth-login-email" type="email" autocomplete="email" placeholder="name@example.com">
+        <label>验证码</label>
+        <div class="code-row">
+          <input id="auth-login-code" inputmode="numeric" maxlength="6" placeholder="6 位数字">
+          <button type="button" class="btn-plain" id="auth-login-send">发送验证码</button>
+        </div>
+      </div>
+      <div class="auth-mode-toggle">
+        <a href="javascript:void(0)" id="auth-toggle-code-login" hidden>📲 验证码登录</a>
+        <a href="javascript:void(0)" id="auth-toggle-pass-login" hidden>🔑 密码登录</a>
+      </div>
+      <div class="auth-actions"><button class="btn-primary" id="auth-login">登录</button></div>
+      <div class="auth-alt">还没有账号？<a href="javascript:void(0)" id="auth-goto-register">创建账号 →</a></div>
+    </div>
+    <div id="auth-register-view" hidden>
+      <label>用户名</label><input id="auth-reg-username" autocomplete="username" placeholder="至少 3 个字符">
+      <label>密码</label><input id="auth-reg-password" type="password" autocomplete="new-password" placeholder="至少 8 个字符">
+      <label>邮箱</label><input id="auth-reg-email" type="email" autocomplete="email" placeholder="name@example.com">
+      <div id="auth-reg-code-row" hidden>
+        <label>邮箱验证码</label>
+        <div class="code-row">
+          <input id="auth-reg-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="6 位数字">
+          <button type="button" class="btn-plain" id="auth-send-code">发送验证码</button>
+        </div>
+      </div>
+      <div class="auth-actions"><button class="btn-primary" id="auth-register">创建账号</button></div>
+      <div class="auth-alt">已有账号？<a href="javascript:void(0)" id="auth-goto-login">← 返回登录</a></div>
     </div>
     <label class="auth-remember"><input type="checkbox" id="auth-remember" checked> 30 天内自动登录</label>
-    <div class="auth-actions">
-      <button class="btn-primary" id="auth-login">登录</button>
-      <button class="btn-plain" id="auth-register">创建账号</button>
-    </div>
     <div class="auth-state" id="auth-state"></div>
   </div>
 </div>
@@ -712,32 +734,55 @@ async function apiJson(url,options){
   if(r.status===401){showAuth();throw new Error('AUTH_REQUIRED');}
   if(!r.ok)throw new Error(j.message||'请求失败');return j;
 }
-let registerCfg={email_code_required:false};
+let registerCfg={email_code_required:false,email_code_login_available:false,will_import_local:false};
+let authMode='login-pass'; // login-pass | login-code | register
 function refreshRegisterCfg(){
-  fetch('/api/auth/register_config').then(r=>r.json()).then(c=>{registerCfg=c||{email_code_required:false};}).catch(()=>{});
+  fetch('/api/auth/register_config').then(r=>r.json()).then(c=>{
+    registerCfg=c||registerCfg;
+    const t=document.getElementById('auth-toggle-code-login');
+    if(t)t.hidden=(authMode!=='login-pass')||!registerCfg.email_code_login_available;
+  }).catch(()=>{});
+}
+function showAuthView(mode){
+  authMode=mode;
+  document.getElementById('auth-login-view').hidden=(mode==='register');
+  document.getElementById('auth-register-view').hidden=(mode!=='register');
+  document.getElementById('auth-login-pass').hidden=(mode!=='login-pass');
+  document.getElementById('auth-login-code-view').hidden=(mode!=='login-code');
+  document.getElementById('auth-toggle-code-login').hidden=(mode==='login-code')||!registerCfg.email_code_login_available;
+  document.getElementById('auth-toggle-pass-login').hidden=(mode!=='login-code');
 }
 function showAuth(message){
   document.getElementById('auth-modal').hidden=false;
   refreshRegisterCfg();
-  document.getElementById('auth-state').textContent=message||'首次使用请创建账号；第一个账号会自动导入现有 Markdown 错题。';
+  showAuthView('login-pass');
+  document.getElementById('auth-state').textContent=message||'登录后同步错题与复习进度；首次使用请点「创建账号」。';
 }
-let codeTimer=null;
-function resetCodeBtn(){
-  if(codeTimer){clearInterval(codeTimer);codeTimer=null;}
-  const btn=document.getElementById('auth-send-code');
-  if(btn){btn.disabled=false;btn.textContent='发送验证码';}
-}
-function startCodeCountdown(sec){
-  const btn=document.getElementById('auth-send-code');
+const codeTimers={};
+function startCodeCountdown(btn,sec){
   btn.disabled=true;btn.textContent=sec+' 秒后可重发';
-  if(codeTimer)clearInterval(codeTimer);
-  codeTimer=setInterval(()=>{
+  if(codeTimers[btn.id])clearInterval(codeTimers[btn.id]);
+  codeTimers[btn.id]=setInterval(()=>{
     sec--;
-    if(sec<=0){clearInterval(codeTimer);codeTimer=null;btn.disabled=false;btn.textContent='发送验证码';}
+    if(sec<=0){clearInterval(codeTimers[btn.id]);delete codeTimers[btn.id];btn.disabled=false;btn.textContent='发送验证码';}
     else btn.textContent=sec+' 秒后可重发';
   },1000);
 }
-function hideAuth(){document.getElementById('auth-modal').hidden=true;document.getElementById('auth-password').value='';document.getElementById('auth-email').value='';document.getElementById('auth-code').value='';document.getElementById('auth-email-row').hidden=true;document.getElementById('auth-code-row').hidden=true;document.getElementById('auth-remember').checked=true;resetCodeBtn();}
+function resetAllCodeBtns(){
+  for(const id in codeTimers)clearInterval(codeTimers[id]);
+  ['auth-send-code','auth-login-send'].forEach(id=>{
+    const b=document.getElementById(id);
+    if(b){b.disabled=false;b.textContent='发送验证码';}
+  });
+  for(const id in codeTimers)delete codeTimers[id];
+}
+function hideAuth(){
+  document.getElementById('auth-modal').hidden=true;
+  ['auth-username','auth-password','auth-login-email','auth-login-code','auth-reg-username','auth-reg-password','auth-reg-email','auth-reg-code']
+    .forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('auth-remember').checked=true;
+  resetAllCodeBtns();
+}
 async function initAccount(){
   try{
     const j=await apiJson('/api/auth/me');
@@ -753,62 +798,94 @@ async function enterAccount(user){
   await loadQuestions();await loadToday();refreshCurrentModel();
 }
 const EMAIL_RE=/^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
-async function submitAuth(mode){
-  const username=document.getElementById('auth-username').value.trim();
-  const password=document.getElementById('auth-password').value;
-  const emailRow=document.getElementById('auth-email-row');
-  const email=document.getElementById('auth-email').value.trim();
-  const state=document.getElementById('auth-state');
-  if(username.length<3||password.length<8){state.textContent='账号至少 3 个字符，密码至少 8 个字符。';return;}
-  const payload={username,password,remember_me:document.getElementById('auth-remember').checked};
-  if(mode==='register'){
-    if(emailRow.hidden){
-      emailRow.hidden=false;
-      if(registerCfg.email_code_required)document.getElementById('auth-code-row').hidden=false;
-      document.getElementById('auth-email').focus();
-      state.textContent=registerCfg.will_import_local
-        ?'注册需要填写邮箱；本机检测到错题库 Markdown，首个账号创建后会自动导入。'
-        :'注册需要填写邮箱，填好后再点一次「创建账号」。登录后可在「我的」页批量导入错题。';
-      return;
-    }
-    if(!EMAIL_RE.test(email)||email.length>254){state.textContent='邮箱格式不正确，请填写形如 name@example.com 的地址。';return;}
-    payload.email=email;
-    if(registerCfg.email_code_required){
-      const code=document.getElementById('auth-code').value.trim();
-      if(!/^\d{6}$/.test(code)){state.textContent='请先点击「发送验证码」，再填写邮箱收到的 6 位验证码。';return;}
-      payload.email_code=code;
-    }
-  }
-  state.textContent=mode==='register'?'正在创建账号并迁移本地错题…':'正在登录…';
-  try{
-    const j=await apiJson('/api/auth/'+mode,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    state.textContent=j.imported?'已导入 '+j.imported+' 道本地错题。':'';await enterAccount(j.user);
-  }catch(e){state.textContent=e.message==='AUTH_REQUIRED'?'登录状态无效，请重试。':e.message;}
+function setAuthState(msg){document.getElementById('auth-state').textContent=msg;}
+async function postAuth(path,payload){
+  const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(j.message||('请求失败（HTTP '+r.status+'）'));
+  return j;
 }
-document.getElementById('auth-login').addEventListener('click',()=>submitAuth('login'));
-document.getElementById('auth-register').addEventListener('click',()=>submitAuth('register'));
-document.getElementById('auth-password').addEventListener('keydown',e=>{if(e.key==='Enter')submitAuth('login');});
-document.getElementById('auth-send-code').addEventListener('click',async()=>{
-  const email=document.getElementById('auth-email').value.trim();
-  const state=document.getElementById('auth-state');
-  if(!EMAIL_RE.test(email)||email.length>254){state.textContent='请先填写正确的邮箱，再发送验证码。';return;}
-  const btn=document.getElementById('auth-send-code');
+async function submitLogin(){
+  const remember=document.getElementById('auth-remember').checked;
+  let payload={remember_me:remember},okMsg='正在登录…';
+  if(authMode==='login-code'){
+    const email=document.getElementById('auth-login-email').value.trim();
+    const code=document.getElementById('auth-login-code').value.trim();
+    if(!EMAIL_RE.test(email)||email.length>254){setAuthState('请填写正确的邮箱地址。');return;}
+    if(!/^\d{6}$/.test(code)){setAuthState('请先点击「发送验证码」，再填写邮箱收到的 6 位验证码。');return;}
+    payload.email=email;payload.email_code=code;
+    okMsg='正在通过验证码登录…';
+  }else{
+    const username=document.getElementById('auth-username').value.trim();
+    const password=document.getElementById('auth-password').value;
+    if(username.length<3||password.length<8){setAuthState('账号至少 3 个字符，密码至少 8 个字符。');return;}
+    payload.username=username;payload.password=password;
+  }
+  setAuthState(okMsg);
+  try{
+    const j=await postAuth('/api/auth/login',payload);
+    setAuthState('');await enterAccount(j.user);
+  }catch(e){setAuthState('❌ '+e.message);}
+}
+async function submitRegister(){
+  const username=document.getElementById('auth-reg-username').value.trim();
+  const password=document.getElementById('auth-reg-password').value;
+  const email=document.getElementById('auth-reg-email').value.trim();
+  if(username.length<3||password.length<8){setAuthState('账号至少 3 个字符，密码至少 8 个字符。');return;}
+  if(!EMAIL_RE.test(email)||email.length>254){setAuthState('邮箱格式不正确，请填写形如 name@example.com 的地址。');return;}
+  const payload={username,password,email,remember_me:document.getElementById('auth-remember').checked};
+  if(registerCfg.email_code_required){
+    const code=document.getElementById('auth-reg-code').value.trim();
+    if(!/^\d{6}$/.test(code)){setAuthState('请先点击「发送验证码」验证邮箱，再填写收到的 6 位验证码。');return;}
+    payload.email_code=code;
+  }
+  setAuthState('正在创建账号…');
+  try{
+    const j=await postAuth('/api/auth/register',payload);
+    setAuthState(j.imported?'已导入 '+j.imported+' 道本地错题。':'');await enterAccount(j.user);
+  }catch(e){setAuthState('❌ '+e.message);}
+}
+async function sendCode(purpose){
+  const isReg=(purpose==='register');
+  const email=(isReg?document.getElementById('auth-reg-email'):document.getElementById('auth-login-email')).value.trim();
+  const btn=document.getElementById(isReg?'auth-send-code':'auth-login-send');
+  if(!EMAIL_RE.test(email)||email.length>254){setAuthState('请先填写正确的邮箱，再发送验证码。');return;}
   btn.disabled=true;btn.textContent='发送中…';
   try{
-    const r=await fetch('/api/auth/send_code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+    const r=await fetch('/api/auth/send_code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,purpose})});
     const j=await r.json().catch(()=>({}));
     if(r.ok&&j.ok){
-      state.textContent='✅ 验证码已发送到 '+email+'（'+(j.ttl_minutes||10)+' 分钟内有效，没收到就看看垃圾邮件）';
-      startCodeCountdown(j.resend_interval_seconds||60);
+      setAuthState('✅ 验证码已发送到 '+email+'（'+(j.ttl_minutes||10)+' 分钟内有效，没收到就看看垃圾邮件）');
+      startCodeCountdown(btn,j.resend_interval_seconds||60);
     }else{
-      resetCodeBtn();
-      state.textContent='❌ '+(j.message||'发送失败，请稍后再试。');
+      btn.disabled=false;btn.textContent='发送验证码';
+      setAuthState('❌ '+(j.message||'发送失败，请稍后再试。'));
     }
   }catch(e){
-    resetCodeBtn();
-    state.textContent='❌ 发送失败：本地服务未启动？';
+    btn.disabled=false;btn.textContent='发送验证码';
+    setAuthState('❌ 发送失败：本地服务未启动？');
   }
+}
+document.getElementById('auth-login').addEventListener('click',submitLogin);
+document.getElementById('auth-register').addEventListener('click',submitRegister);
+document.getElementById('auth-password').addEventListener('keydown',e=>{if(e.key==='Enter')submitLogin();});
+document.getElementById('auth-login-code').addEventListener('keydown',e=>{if(e.key==='Enter')submitLogin();});
+document.getElementById('auth-reg-code').addEventListener('keydown',e=>{if(e.key==='Enter')submitRegister();});
+document.getElementById('auth-send-code').addEventListener('click',()=>sendCode('register'));
+document.getElementById('auth-login-send').addEventListener('click',()=>sendCode('login'));
+document.getElementById('auth-toggle-code-login').addEventListener('click',()=>{
+  showAuthView('login-code');setAuthState('输入注册时绑定的邮箱，接收验证码即可免密登录。');
 });
+document.getElementById('auth-toggle-pass-login').addEventListener('click',()=>{showAuthView('login-pass');setAuthState('');});
+document.getElementById('auth-goto-register').addEventListener('click',()=>{
+  showAuthView('register');
+  document.getElementById('auth-reg-code-row').hidden=!registerCfg.email_code_required;
+  setAuthState(registerCfg.email_code_required
+    ?'填写用户名、密码和邮箱，点「发送验证码」完成邮箱验证后创建账号。'
+    :'填写用户名、密码和邮箱后点击「创建账号」。');
+  document.getElementById('auth-reg-username').focus();
+});
+document.getElementById('auth-goto-login').addEventListener('click',()=>{showAuthView('login-pass');setAuthState('');});
 document.getElementById('logout-btn').addEventListener('click',async()=>{
   await fetch('/api/auth/logout',{method:'POST'});currentUser=null;window.__QUIZ_DATA__=[];
   document.getElementById('user-area').hidden=true;renderLibrary();showAuth('已安全退出。');
