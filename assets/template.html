@@ -192,7 +192,7 @@
   .modal-mask{position:fixed;inset:0;background:rgba(15,20,32,.45);display:flex;align-items:center;
               justify-content:center;z-index:60;}
   .modal-mask[hidden]{display:none;}
-  .modal{background:var(--card);border-radius:16px;padding:22px;width:440px;max-width:92vw;}
+  .modal{background:var(--card);border-radius:16px;padding:22px;width:440px;max-width:92vw;max-height:calc(100vh - 40px);overflow-y:auto;}
   .modal h3{margin:0 0 16px;font-size:16px;}
   .modal label{display:block;font-size:13px;color:#4b5163;margin:10px 0 4px;}
   .modal input{width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;
@@ -294,10 +294,14 @@
   .me-stats .review-kpi strong{font-size:22px}
   .me-section{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-top:16px}
   .me-section h3{margin:0 0 8px;font-size:15px}
+  .me-section label{display:block;font-size:13px;color:#4b5163;margin:10px 0 4px}
+  .me-section input{width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;box-sizing:border-box}
+  .me-section input:focus{border-color:var(--brand);outline:none}
   .import-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
   .import-actions .btn-plain{padding:10px 16px;border-radius:9px;font-size:13.5px;font-weight:600;cursor:pointer}
   .import-actions .btn-plain:disabled{opacity:.55;cursor:not-allowed}
   .import-state{font-size:12.5px;color:var(--muted);margin-top:10px;white-space:pre-line;line-height:1.6}
+  .invite-code{font-size:20px;font-weight:700;letter-spacing:4px;color:var(--brand);background:var(--brand-soft);border-radius:9px;padding:8px 16px}
 
   @media (max-width:900px){
     header{padding:12px 18px}.layout{display:block}.layout nav{display:none}main{padding:18px}
@@ -548,6 +552,28 @@
       <div class="review-kpi"><strong id="me-due">0</strong><span>今日待复习</span></div>
     </div>
   </div>
+  <div class="me-section" id="me-ai-section">
+    <h3>🤖 AI 助手</h3>
+    <p class="meta" id="me-ai-status">正在加载额度信息…</p>
+    <label>API Base URL</label><input id="my-ai-base" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1">
+    <label>模型名</label><input id="my-ai-model" placeholder="qwen-vl-max / qwen-vl-plus 等">
+    <label>自己的 API Key</label><input id="my-ai-key" type="password" placeholder="留空沿用已保存 Key；配置后 AI 不限次数">
+    <div class="import-actions">
+      <button class="btn-plain" id="my-ai-test">🔌 测试连接</button>
+      <button class="btn-plain" id="my-ai-save">💾 保存自己的配置</button>
+      <button class="btn-plain" id="my-ai-clear">恢复使用站点默认</button>
+    </div>
+    <div class="import-state" id="my-ai-state"></div>
+  </div>
+  <div class="me-section">
+    <h3>🎁 邀请好友</h3>
+    <p class="meta">好友注册时填写你的邀请码，你的每日免费 AI 次数永久 +10。</p>
+    <div class="import-actions">
+      <span class="invite-code" id="my-invite-code">--------</span>
+      <button class="btn-plain" id="my-invite-copy">📋 复制邀请码</button>
+    </div>
+    <div class="import-state" id="my-invite-info"></div>
+  </div>
   <div class="me-section">
     <h3>📥 导入错题</h3>
     <p class="meta">把本机的 Markdown 错题文件（含「模板.md」那种 frontmatter 格式，也支持纯正文）批量导入到本账号；也可以用 AI 识别错题图片或粘贴文本自动整理入库。重复导入相同文件会自动跳过，不会产生重复错题。</p>
@@ -707,6 +733,7 @@
           <button type="button" class="btn-plain" id="auth-send-code">发送验证码</button>
         </div>
       </div>
+      <label>邀请码（选填）</label><input id="auth-reg-invite" placeholder="好友的邀请码，TA 的每日免费次数 +10">
       <div class="auth-actions"><button class="btn-primary" id="auth-register">创建账号</button></div>
       <div class="auth-alt">已有账号？<a href="javascript:void(0)" id="auth-goto-login">← 返回登录</a></div>
     </div>
@@ -778,7 +805,7 @@ function resetAllCodeBtns(){
 }
 function hideAuth(){
   document.getElementById('auth-modal').hidden=true;
-  ['auth-username','auth-password','auth-login-email','auth-login-code','auth-reg-username','auth-reg-password','auth-reg-email','auth-reg-code']
+  ['auth-username','auth-password','auth-login-email','auth-login-code','auth-reg-username','auth-reg-password','auth-reg-email','auth-reg-code','auth-reg-invite']
     .forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('auth-remember').checked=true;
   resetAllCodeBtns();
@@ -834,6 +861,8 @@ async function submitRegister(){
   if(username.length<3||password.length<8){setAuthState('账号至少 3 个字符，密码至少 8 个字符。');return;}
   if(!EMAIL_RE.test(email)||email.length>254){setAuthState('邮箱格式不正确，请填写形如 name@example.com 的地址。');return;}
   const payload={username,password,email,remember_me:document.getElementById('auth-remember').checked};
+  const invite=document.getElementById('auth-reg-invite').value.trim();
+  if(invite)payload.invite_code=invite;
   if(registerCfg.email_code_required){
     const code=document.getElementById('auth-reg-code').value.trim();
     if(!/^\d{6}$/.test(code)){setAuthState('请先点击「发送验证码」验证邮箱，再填写收到的 6 位验证码。');return;}
@@ -886,6 +915,16 @@ document.getElementById('auth-goto-register').addEventListener('click',()=>{
   document.getElementById('auth-reg-username').focus();
 });
 document.getElementById('auth-goto-login').addEventListener('click',()=>{showAuthView('login-pass');setAuthState('');});
+/* 统一：点击弹窗遮罩区域自动关闭（在弹窗内按下拖拽到遮罩的误触不算） */
+document.querySelectorAll('.modal-mask').forEach(function(mask){
+  mask.addEventListener('mousedown',function(e){mask._downOnMask=(e.target===mask);});
+  mask.addEventListener('click',function(e){
+    if(e.target!==mask||!mask._downOnMask)return;
+    mask._downOnMask=false;
+    mask.hidden=true;
+    if(mask.id==='auth-modal')hideAuth();
+  });
+});
 document.getElementById('logout-btn').addEventListener('click',async()=>{
   await fetch('/api/auth/logout',{method:'POST'});currentUser=null;window.__QUIZ_DATA__=[];
   document.getElementById('user-area').hidden=true;renderLibrary();showAuth('已安全退出。');
@@ -979,7 +1018,65 @@ function renderMe(){
   document.getElementById('me-total').textContent=D.length;
   document.getElementById('me-mastered').textContent=D.filter(q=>q.status==='已掌握').length;
   document.getElementById('me-due').textContent=todayStats.due;
+  refreshAiQuota();
 }
+function refreshAiQuota(){
+  fetch('/api/ai_quota').then(r=>r.json()).then(q=>{
+    document.getElementById('my-invite-code').textContent=q.invite_code||'--------';
+    document.getElementById('my-invite-info').textContent='已邀请 '+q.invite_bonus+' 人 · 每日免费额度 '+q.base_free+' + '+q.invite_bonus*10+' = '+q.daily_total+' 次（今日已用 '+q.used_today+' 次）';
+    const st=document.getElementById('me-ai-status');
+    if(q.using_own_config)st.textContent='✅ 正在使用你自己的 AI 配置，调用不限次数。';
+    else if(q.is_admin)st.textContent='👑 管理员：使用站点默认模型 '+(q.site_model||'')+'，不限次数。';
+    else st.textContent='📦 当前使用站点默认模型 '+(q.site_model||'')+'，今日免费额度剩余 '+q.remaining+'/'+q.daily_total+' 次。超出后可在下方配置自己的 Key，或邀请好友（每位 +10 次/日）。';
+  }).catch(()=>{});
+  fetch('/api/my_ai_config').then(r=>r.json()).then(c=>{
+    document.getElementById('my-ai-base').value=c.base_url||'';
+    document.getElementById('my-ai-model').value=c.model||'';
+    document.getElementById('my-ai-key').value='';
+    setMyAiState(c.configured?'已配置自己的 Key（末尾 '+c.api_key_tail+'），AI 不限次数':'尚未配置自己的 Key，使用站点默认模型（受每日免费额度限制）');
+  }).catch(()=>{});
+}
+function setMyAiState(msg){document.getElementById('my-ai-state').textContent=msg;}
+function myAiForm(){return {
+  base_url:document.getElementById('my-ai-base').value.trim(),
+  model:document.getElementById('my-ai-model').value.trim(),
+  api_key:document.getElementById('my-ai-key').value
+};}
+document.getElementById('my-ai-save').addEventListener('click',()=>{
+  const f=myAiForm();
+  if(!f.model){setMyAiState('⛔ 请填写模型名');return;}
+  const body={base_url:f.base_url,model:f.model};
+  if(f.api_key)body.api_key=f.api_key;
+  fetch('/api/my_ai_config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(r=>r.json().catch(()=>({})))
+    .then(c=>{
+      if(!c.ok){setMyAiState('⛔ '+(c.message||'保存失败'));return;}
+      refreshAiQuota();
+      setMyAiState('✅ 已保存自己的 AI 配置（末尾 '+c.api_key_tail+'），调用不限次数');
+    })
+    .catch(()=>setMyAiState('⚠️ 保存失败：本地服务未启动？'));
+});
+document.getElementById('my-ai-test').addEventListener('click',()=>{
+  const f=myAiForm();
+  if(!f.model){setMyAiState('⛔ 请先填写模型名');return;}
+  setMyAiState('⏳ 正在测试连接…');
+  fetch('/api/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(f)})
+    .then(r=>r.json().catch(()=>({})))
+    .then(j=>setMyAiState((j.ok?'✅ 测试通过（回复：'+esc(j.reply||'')+'）':'❌ '+(j.message||'测试失败'))))
+    .catch(()=>setMyAiState('❌ 测试失败：本地服务未启动？'));
+});
+document.getElementById('my-ai-clear').addEventListener('click',()=>{
+  fetch('/api/my_ai_config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'clear'})})
+    .then(r=>r.json()).then(()=>{refreshAiQuota();setMyAiState('已清除自己的配置，恢复使用站点默认模型（受每日免费额度限制）');})
+    .catch(()=>setMyAiState('⚠️ 操作失败：本地服务未启动？'));
+});
+document.getElementById('my-invite-copy').addEventListener('click',()=>{
+  const code=document.getElementById('my-invite-code').textContent.trim();
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(code).then(()=>{document.getElementById('my-invite-info').textContent='✅ 邀请码 '+code+' 已复制，注册时填入即可。';})
+      .catch(()=>{document.getElementById('my-invite-info').textContent='邀请码：'+code+'（请手动复制）';});
+  }else document.getElementById('my-invite-info').textContent='邀请码：'+code+'（请手动复制）';
+});
 async function runImport(fileList){
   const state=document.getElementById('import-state');
   const btns=[document.getElementById('me-import-btn'),document.getElementById('me-import-folder')];
@@ -1394,6 +1491,7 @@ function sendMsg(text){
       doneTyping();
       if(!r.ok){
         if(j.error==='NOT_CONFIGURED'){addMsg('sys','尚未配置 API Key。点击右上角 ⚙️ 打开设置填写后即可使用 AI。');openSettings();}
+        else if(j.error==='AI_QUOTA_EXCEEDED'){addMsg('sys','⛔ '+j.message);switchTab('me');}
         else addMsg('sys','请求失败：'+(j.message||r.status));
       }else{
         addMsg('ai',j.reply||'(空回复)');
@@ -1436,6 +1534,7 @@ async function classify(){
     const j=await r.json().catch(()=>({}));
     if(!r.ok){
       if(j.error==='NOT_CONFIGURED')addState('⚠️ 尚未配置 API Key，点右上角 ⚙️ 配置后即可使用。','err');
+      else if(j.error==='AI_QUOTA_EXCEEDED'){addState('⛔ 今日免费次数已用完，已跳转「我的」页——可配置自己的 Key 解除限制，或邀请好友 +10 次/人。','err');switchTab('me');}
       else addState('整理失败：'+(j.message||j.error||r.status),'err');
       return;
     }
