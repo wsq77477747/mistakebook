@@ -283,7 +283,13 @@ class ServerApiTests(unittest.TestCase):
     # 命名以 user_ 开头：字母序排在 test_auth 之后执行，避免抢占「首个注册用户=管理员」的测试前提
     def test_user_quota_invite_and_own_config(self):
         orig_call = server._call_llm
+        orig_load_config = server.load_config
         server._call_llm = lambda cfg, messages, **kw: "ok"
+        server.load_config = lambda: {
+            "base_url": "https://ci.example/v1",
+            "api_key": "sk-ci-placeholder",
+            "model": "ci-test-model",
+        }
         try:
             inviter = server.storage.register_user("quota-user", "password123", "quota-user@example.com")
             client = urllib.request.build_opener(
@@ -334,6 +340,7 @@ class ServerApiTests(unittest.TestCase):
             self.assertEqual(status, 200)  # 额度内还有剩余（13-4=9）
         finally:
             server._call_llm = orig_call
+            server.load_config = orig_load_config
 
     def test_email_code_flow_when_enabled(self):
         import mailer
