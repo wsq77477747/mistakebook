@@ -524,6 +524,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._send_json(200, self._my_ai_config_view())
         if path == "/api/profile":
             return self._send_json(200, {"profile": storage.get_profile(self.user["id"])})
+        if path == "/api/level":
+            return self._send_json(200, storage.get_level_state(self.user["id"]))
         if path == "/api/email/config":
             if not self.user.get("is_admin"):
                 return self._send_json(403, {"error": "ADMIN_REQUIRED", "message": "只有站点管理员可以查看邮件配置。"})
@@ -637,7 +639,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                          invite_code=body.get("invite_code"))
             remember = bool(body.get("remember_me", True))
             token = storage.create_session(user["id"], persistent=remember)
-            response = {"ok": True,
+            try:
+                reg_level = storage.record_action(user["id"], "login")
+            except Exception:
+                reg_level = None
+            response = {"ok": True, "level": reg_level,
                         "user": {"id": user["id"], "username": user["username"], "email": user["email"],
                                  "is_admin": user["is_admin"], "avatar": user.get("avatar", ""),
                                  "display_name": user.get("display_name", ""), "bio": user.get("bio", "")},
@@ -734,7 +740,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return self._send_json(401, {"error": "LOGIN_FAILED", "message": "账号或密码不正确。"})
             method = "password"
         token = storage.create_session(user["id"], persistent=remember)
-        response = {"ok": True, "user": user}
+        try:
+            login_level = storage.record_action(user["id"], "login")
+        except Exception:
+            login_level = None
+        response = {"ok": True, "user": user, "level": login_level}
         if body.get("client_type") == "mini_program":
             response["session_token"] = token
         self._send_auth(200, response, token=token, remember=remember)
@@ -790,7 +800,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         try:
             post_id = storage.create_community_post(self.user["id"], body.get("content"))
             self._track_event("community_post", metadata={"post_id": post_id})
-            return self._send_json(201, {"ok": True, "post_id": post_id})
+            return self._send_json(201, {"ok": True, "post_id": post_id, "level": self._grant("interact")})
         except ValueError as exc:
             return self._send_json(400, {"error": "POST_FAILED", "message": str(exc)})
 
@@ -803,7 +813,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._track_event("community_comment", metadata={
                 "post_id": str(body.get("post_id") or "")[:36]
             })
-            return self._send_json(201, {"ok": True, "comment_id": comment_id})
+            return self._send_json(201, {"ok": True, "comment_id": comment_id, "level": self._grant("interact")})
         except ValueError as exc:
             return self._send_json(400, {"error": "COMMENT_FAILED", "message": str(exc)})
 
@@ -811,7 +821,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         body = self._read_body()
         try:
             result = storage.toggle_community_like(self.user["id"], body.get("post_id"))
-            return self._send_json(200, {"ok": True, **result})
+            return self._send_json(200, {"ok": True, **result, "level": self._grant("interact")})
         except ValueError as exc:
             return self._send_json(400, {"error": "LIKE_FAILED", "message": str(exc)})
 
@@ -819,7 +829,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         body = self._read_body()
         try:
             result = storage.share_community_post(self.user["id"], body.get("post_id"))
-            return self._send_json(200, {"ok": True, **result})
+            return self._send_json(200, {"ok": True, **result, "level": self._grant("interact")})
         except ValueError as exc:
             return self._send_json(400, {"error": "SHARE_FAILED", "message": str(exc)})
 
@@ -860,7 +870,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             result = storage.record_review(
                 self.user["id"], str(body.get("question_id") or ""), body.get("rating"), body.get("device_id")
             )
-            self._send_json(200, {"ok": True, "schedule": result})
+            lv = self._grant("review")
+            self._send_json(200, {"ok": True, "schedule": result, "level": lv})
             self._track_event("review", metadata={"question_id": str(body.get("question_id", ""))[:36], "rating": body.get("rating")})
         except (KeyError, ValueError) as exc:
             self._send_json(400, {"error": "REVIEW_FAILED", "message": str(exc)})
@@ -879,6 +890,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._send_json(200, {"ok": True, "profile": profile})
         except ValueError as exc:
             self._send_json(400, {"error": "PROFILE_FAIL", "message": str(exc)})
+
+    def _grant(self, action):
+        """动作发放经验，失败不影响主流程；返回结果或 None。"""
+        try:
+            return storage.record_action(self.user["id"], action)
+        except Exception:
+            return None
 
     # ---- 配置 ----
     def _get_config(self):
@@ -1431,6 +1449,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.user["id"], record, source_file=os.path.relpath(path, ROOT)
         )
         self._track_event("add_question", metadata={"question_id": question_id[:36], "cat": cat[:30], "has_image": bool(image_rel)})
+        add_level = self._grant("add")
 
         try:
             _rebuild()
@@ -1441,7 +1460,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                   "warning": f"已写入，但重建索引失败: {e}"})
             return
         self._send_json(200, {"ok": True, "path": os.path.relpath(path, ROOT),
-                              "image": image_rel,
+                              "image": image_rel, "level": add_level,
                               "id": question_id,
                               "no": no, "title": title, "cat": cat})
 

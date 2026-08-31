@@ -28,6 +28,69 @@ AUTH_TICKET_TTL_MINUTES = 10
 PBKDF2_ITERATIONS = 240_000
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$")
 
+# ================= 等级 / 经验 / 每日任务 =================
+# 30 级称号，每 5 级一个大段位（初识→渐悟→精进→通达→卓越→传说）
+LEVEL_TITLES = [
+    "数据萌新", "查询见习生", "SELECT 学徒", "条件过滤手", "初阶查询员",      # 1-5  初识
+    "表连接行者", "聚合运算手", "分组分析师", "子查询能手", "熟练查询师",    # 6-10 渐悟
+    "窗口函数客", "索引优化者", "查询规划师", "数据建模师", "逻辑架构师",    # 11-15 精进
+    "性能调优师", "数据工程师", "洞察分析师", "商业智能师", "算法炼金师",    # 16-20 通达
+    "数据科学家", "建模艺术家", "全域架构师", "首席数据官", "数据博学者",    # 21-25 卓越
+    "数据宗师", "查询之灵", "逻辑圣手", "数据贤者", "数据之神",             # 26-30 传说
+]
+TIER_NAMES = ["初识", "渐悟", "精进", "通达", "卓越", "传说"]
+# 各段位主题渐变色（前端徽章/进度条共用）
+TIER_COLORS = [
+    ("#b08d57", "#d4af7a"),  # 初识 青铜
+    ("#94a3b8", "#cbd5e1"),  # 渐悟 白银
+    ("#eab308", "#facc15"),  # 精进 黄金
+    ("#06b6d4", "#3b82f6"),  # 通达 铂金
+    ("#8b5cf6", "#ec4899"),  # 卓越 钻石
+    ("#f97316", "#ec4899"),  # 传说 炫彩
+]
+MAX_LEVEL = len(LEVEL_TITLES)
+
+def level_cum_exp(level):
+    """达到指定等级所需的累计经验（Lv1 为 0）。每级增量 50+(L-1)*20。"""
+    if level <= 1:
+        return 0
+    n = level - 1
+    return n * (50 + 10 * (n - 1))
+
+def level_from_exp(exp):
+    """由总经验推算等级状态：等级、称号、段位、本级起点、下级所需总量、进度比例。"""
+    exp = max(0, int(exp or 0))
+    level = 1
+    while level < MAX_LEVEL and exp >= level_cum_exp(level + 1):
+        level += 1
+    title = LEVEL_TITLES[level - 1]
+    tier_idx = (level - 1) // 5
+    tier = TIER_NAMES[tier_idx]
+    c1, c2 = TIER_COLORS[tier_idx]
+    cur_base = level_cum_exp(level)
+    if level >= MAX_LEVEL:
+        return {"level": level, "title": title, "tier": tier, "tier_index": tier_idx,
+                "color1": c1, "color2": c2, "cur_base": cur_base, "next_need": cur_base,
+                "into_level": exp - cur_base, "span": 1, "progress": 1.0, "maxed": True}
+    next_base = level_cum_exp(level + 1)
+    span = next_base - cur_base
+    return {"level": level, "title": title, "tier": tier, "tier_index": tier_idx,
+            "color1": c1, "color2": c2, "cur_base": cur_base, "next_need": next_base,
+            "into_level": exp - cur_base, "span": span,
+            "progress": (exp - cur_base) / span, "maxed": False}
+
+# 每日任务清单：metric 对应 daily_progress 的计数字段，达成自动发奖励
+DAILY_TASKS = [
+    {"key": "login1",    "label": "每日登录",        "metric": "login_done",  "target": 1,  "reward": 10},
+    {"key": "review3",   "label": "复习 3 道错题",   "metric": "reviews",    "target": 3,  "reward": 15},
+    {"key": "review10",  "label": "复习 10 道错题",  "metric": "reviews",    "target": 10, "reward": 30},
+    {"key": "add1",      "label": "新增 1 道错题",   "metric": "adds",       "target": 1,  "reward": 15},
+    {"key": "interact1", "label": "讨论室互动 1 次", "metric": "interactions","target": 1, "reward": 10},
+]
+# 即时行为经验与每日上限（防刷）
+ACTION_EXP = {"review": 5, "add": 8, "interact": 3}
+ACTION_DAILY_CAP = {"review": 100, "add": 80, "interact": 30}
+
 
 def _now():
     return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -234,6 +297,20 @@ def init_db():
               ON community_likes(post_id);
             CREATE INDEX IF NOT EXISTS idx_community_shares_post
               ON community_shares(post_id);
+
+            CREATE TABLE IF NOT EXISTS daily_progress (
+              user_id TEXT NOT NULL,
+              date TEXT NOT NULL,
+              login_done INTEGER NOT NULL DEFAULT 0,
+              reviews INTEGER NOT NULL DEFAULT 0,
+              adds INTEGER NOT NULL DEFAULT 0,
+              interactions INTEGER NOT NULL DEFAULT 0,
+              exp_review INTEGER NOT NULL DEFAULT 0,
+              exp_add INTEGER NOT NULL DEFAULT 0,
+              exp_interact INTEGER NOT NULL DEFAULT 0,
+              claimed TEXT NOT NULL DEFAULT '[]',
+              PRIMARY KEY(user_id, date)
+            );
             """
         )
         user_columns = {row[1] for row in db.execute("PRAGMA table_info(users)")}
@@ -245,6 +322,8 @@ def init_db():
             ("avatar", "TEXT NOT NULL DEFAULT ''"),
             ("display_name", "TEXT NOT NULL DEFAULT ''"),
             ("bio", "TEXT NOT NULL DEFAULT ''"),
+            ("exp", "INTEGER NOT NULL DEFAULT 0"),
+            ("last_login_date", "TEXT NOT NULL DEFAULT ''"),
         ):
             if col not in user_columns:
                 db.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
@@ -393,6 +472,7 @@ def _user_public(row):
         "avatar": row["avatar"] if "avatar" in keys else "",
         "display_name": row["display_name"] if "display_name" in keys else "",
         "bio": row["bio"] if "bio" in keys else "",
+        "exp": int(row["exp"]) if "exp" in keys and row["exp"] is not None else 0,
         "invite_code": row["invite_code"] if "invite_code" in keys else "",
     }
 
@@ -420,7 +500,7 @@ def update_profile(user_id, display_name=None, bio=None, avatar=None):
         # 头像限制 300KB（data URL），防止数据库膨胀
         if len(av) > 300_000:
             raise ValueError("头像图片过大，请压缩到 200KB 以内。")
-        if av and not (av.startswith("data:image/")):
+        if av and not (av.startswith("data:image/") or av.startswith("/assets/avatars/")):
             raise ValueError("头像格式不正确。")
         sets.append("avatar=?")
         params.append(av)
@@ -432,6 +512,135 @@ def update_profile(user_id, display_name=None, bio=None, avatar=None):
     with connect() as db:
         db.execute(f"UPDATE users SET {','.join(sets)} WHERE id=?", params)
     return get_profile(user_id)
+
+
+# ---- 等级 / 经验系统 ----
+def grant_exp(user_id, amount, db=None):
+    """增加经验，返回 (新总经验, 旧等级, 新等级)；可复用外部事务 db。"""
+    amount = int(amount or 0)
+
+    def _do(conn):
+        row = conn.execute("SELECT exp FROM users WHERE id=?", (user_id,)).fetchone()
+        old_exp = int(row["exp"] or 0) if row else 0
+        old_lv = level_from_exp(old_exp)["level"]
+        new_exp = old_exp + amount
+        conn.execute("UPDATE users SET exp=? WHERE id=?", (new_exp, user_id))
+        return new_exp, old_lv, level_from_exp(new_exp)["level"]
+
+    if db is not None:
+        return _do(db)
+    with connect() as conn:
+        return _do(conn)
+
+
+def _ensure_daily_row(conn, user_id, today):
+    row = conn.execute(
+        "SELECT * FROM daily_progress WHERE user_id=? AND date=?", (user_id, today)
+    ).fetchone()
+    if row:
+        return row
+    conn.execute("INSERT INTO daily_progress(user_id,date) VALUES(?,?)", (user_id, today))
+    return conn.execute(
+        "SELECT * FROM daily_progress WHERE user_id=? AND date=?", (user_id, today)
+    ).fetchone()
+
+
+def record_action(user_id, action):
+    """记录一次行为（login/review/add/interact），发即时经验并自动结算每日任务奖励。"""
+    today = _today().isoformat()
+    gained, finished_tasks, leveled = 0, [], None
+    with connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = _ensure_daily_row(conn, user_id, today)
+        if action == "login":
+            if not row["login_done"]:
+                conn.execute(
+                    "UPDATE daily_progress SET login_done=1 WHERE user_id=? AND date=?",
+                    (user_id, today))
+        elif action in ("review", "add", "interact"):
+            col = {"review": "reviews", "add": "adds", "interact": "interactions"}[action]
+            expcol = {"review": "exp_review", "add": "exp_add",
+                      "interact": "exp_interact"}[action]
+            already = int(row[expcol] or 0)
+            this_exp = min(ACTION_EXP[action], max(0, ACTION_DAILY_CAP[action] - already))
+            conn.execute(
+                f"UPDATE daily_progress SET {col}={col}+1, {expcol}={expcol}+? "
+                "WHERE user_id=? AND date=?", (this_exp, user_id, today))
+            if this_exp > 0:
+                _, old_lv, new_lv = grant_exp(user_id, this_exp, db=conn)
+                gained += this_exp
+                if new_lv > old_lv:
+                    leveled = [old_lv, new_lv]
+        # 自动结算达成的每日任务
+        row = conn.execute(
+            "SELECT * FROM daily_progress WHERE user_id=? AND date=?", (user_id, today)
+        ).fetchone()
+        try:
+            claimed = json.loads(row["claimed"] or "[]")
+        except ValueError:
+            claimed = []
+        metrics = {"login_done": int(row["login_done"]), "reviews": int(row["reviews"]),
+                   "adds": int(row["adds"]), "interactions": int(row["interactions"])}
+        reward_total = 0
+        for t in DAILY_TASKS:
+            if t["key"] in claimed:
+                continue
+            if metrics.get(t["metric"], 0) >= t["target"]:
+                claimed.append(t["key"])
+                reward_total += t["reward"]
+                finished_tasks.append({"key": t["key"], "label": t["label"],
+                                       "reward": t["reward"]})
+        if reward_total:
+            _, old_lv, new_lv = grant_exp(user_id, reward_total, db=conn)
+            gained += reward_total
+            if new_lv > old_lv:
+                leveled = [old_lv, new_lv]
+        conn.execute("UPDATE daily_progress SET claimed=? WHERE user_id=? AND date=?",
+                     (json.dumps(claimed, ensure_ascii=False), user_id, today))
+        if action == "login":
+            conn.execute("UPDATE users SET last_login_date=? WHERE id=?", (today, user_id))
+        exp_row = conn.execute("SELECT exp FROM users WHERE id=?", (user_id,)).fetchone()
+        total_exp = int(exp_row["exp"] or 0)
+    return {"action": action, "gained": gained, "total_exp": total_exp,
+            "finished_tasks": finished_tasks, "leveled": leveled}
+
+
+def get_level_state(user_id):
+    """返回等级/称号/经验进度 + 今日任务清单与完成情况。"""
+    with connect() as conn:
+        urow = conn.execute("SELECT exp FROM users WHERE id=?", (user_id,)).fetchone()
+        total_exp = int(urow["exp"] or 0) if urow else 0
+        today = _today().isoformat()
+        drow = conn.execute(
+            "SELECT * FROM daily_progress WHERE user_id=? AND date=?", (user_id, today)
+        ).fetchone()
+    lv = level_from_exp(total_exp)
+    metrics = {"login_done": 0, "reviews": 0, "adds": 0, "interactions": 0}
+    claimed = []
+    instant = 0
+    if drow:
+        for k in metrics:
+            metrics[k] = int(drow[k] or 0)
+        try:
+            claimed = json.loads(drow["claimed"] or "[]")
+        except ValueError:
+            claimed = []
+        instant = int(drow["exp_review"] + drow["exp_add"] + drow["exp_interact"])
+    tasks, done_count = [], 0
+    for t in DAILY_TASKS:
+        is_done = t["key"] in claimed
+        done_count += 1 if is_done else 0
+        tasks.append({"key": t["key"], "label": t["label"], "metric": t["metric"],
+                      "target": t["target"], "reward": t["reward"],
+                      "current": min(metrics.get(t["metric"], 0), t["target"]),
+                      "done": is_done})
+    task_reward_got = sum(t["reward"] for t in DAILY_TASKS if t["key"] in claimed)
+    state = {"exp": total_exp}
+    state.update(lv)
+    state.update({"tasks": tasks, "done_count": done_count,
+                  "task_total": len(DAILY_TASKS),
+                  "gained_today": instant + task_reward_got, "metrics": metrics})
+    return state
 
 
 # ---- 用户级 AI 配置与每日免费额度 ----

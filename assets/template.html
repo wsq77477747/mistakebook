@@ -334,6 +334,60 @@
   .me-display-name{font-size:13px;opacity:.9;margin:2px 0}
   .me-bio{flex:0 0 100%;width:100%;font-size:13px;line-height:1.6;background:rgba(255,255,255,.14);border-radius:10px;padding:8px 12px;margin-top:4px;display:none}
   .me-bio.show{display:block}
+  /* 等级徽章与经验条 */
+  .me-level{flex:0 0 100%;display:flex;align-items:center;gap:12px;margin-top:12px;cursor:pointer;
+            background:rgba(255,255,255,.14);border-radius:12px;padding:10px 14px;transition:background .15s}
+  .me-level:hover{background:rgba(255,255,255,.22)}
+  .level-badge{flex-shrink:0;width:52px;height:52px;border-radius:14px;display:flex;flex-direction:column;
+               align-items:center;justify-content:center;color:#fff;font-weight:800;line-height:1;
+               box-shadow:0 4px 12px rgba(0,0,0,.18)}
+  .level-badge small{font-size:9px;font-weight:700;opacity:.9;margin-top:2px}
+  .level-badge b{font-size:19px}
+  .level-main{flex:1;min-width:0}
+  .level-title-row{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+  .level-title{font-weight:800;font-size:15px;color:#fff}
+  .level-tier{font-size:11px;font-weight:700;background:rgba(255,255,255,.22);color:#fff;
+              padding:1px 8px;border-radius:20px}
+  .level-exp-text{margin-left:auto;font-size:11.5px;color:#eef3ff;font-weight:600;white-space:nowrap}
+  .exp-bar{height:8px;background:rgba(255,255,255,.25);border-radius:99px;overflow:hidden}
+  .exp-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#fde68a,#fff);
+             width:0;transition:width .5s cubic-bezier(.2,.8,.3,1)}
+  .level-hint{flex:0 0 100%;font-size:11.5px;color:#eaf0ff;opacity:.9;margin-top:-4px}
+  /* 每日任务弹窗 */
+  .task-head-row{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+  .task-head-row .lv-pill{font-weight:800;color:#fff;border-radius:10px;padding:4px 12px;font-size:14px}
+  .task-list{margin:10px 0}
+  .task-item{display:flex;align-items:center;gap:12px;padding:11px 12px;border:1px solid var(--line);
+             border-radius:12px;margin-bottom:8px;background:#fafbff}
+  .task-item.done{background:#f0fbf4;border-color:#bfe8cd}
+  .task-check{width:24px;height:24px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;
+              justify-content:center;background:#e7eaf2;color:#9aa1b5;font-weight:800;font-size:13px}
+  .task-item.done .task-check{background:#16a34a;color:#fff}
+  .task-info{flex:1;min-width:0}
+  .task-info .t-name{font-size:13.5px;font-weight:600;color:var(--ink)}
+  .task-item.done .task-info .t-name{color:#15803d;text-decoration:line-through;opacity:.8}
+  .task-mini-bar{height:5px;background:#e7eaf2;border-radius:99px;margin-top:5px;overflow:hidden}
+  .task-mini-bar i{display:block;height:100%;background:linear-gradient(90deg,#2f6fed,#6d28d9)}
+  .task-reward{font-size:12.5px;font-weight:700;color:#d97706;white-space:nowrap}
+  .task-item.done .task-reward{color:#16a34a}
+  /* AI 对话头像 */
+  .msg-row{display:flex;gap:8px;align-items:flex-start;max-width:92%}
+  .msg-row.user{align-self:flex-end;flex-direction:row-reverse}
+  .msg-avatar{width:30px;height:30px;border-radius:50%;flex-shrink:0;object-fit:cover;
+              box-shadow:0 2px 6px rgba(70,60,180,.25)}
+  .msg-row .msg{max-width:100%}
+  /* AI 浮窗与面板头部使用学姐头像 */
+  #ai-fab img.fab-tutor{width:100%;height:100%;border-radius:50%;object-fit:cover;position:relative;z-index:1}
+  .ai-tutor-head{width:28px;height:28px;border-radius:50%;object-fit:cover}
+  /* 头像选择器-卡通头像 */
+  .avatar-picker .av-cartoon{background:#f1f3f9;padding:0;overflow:hidden}
+  .avatar-picker .av-cartoon img{width:100%;height:100%;object-fit:cover}
+  .picker-section-title{font-size:12.5px;font-weight:700;color:#5b6272;margin:12px 0 2px}
+  /* 升级庆祝 toast */
+  .level-toast{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-80px);z-index:99999;
+               background:linear-gradient(135deg,#f59e0b,#ec4899);color:#fff;padding:12px 22px;border-radius:14px;
+               font-weight:700;box-shadow:0 10px 30px rgba(236,72,153,.4);transition:transform .4s cubic-bezier(.2,.9,.3,1.3);font-size:14px}
+  .level-toast.show{transform:translateX(-50%) translateY(0)}
   .code-row{display:flex;gap:8px}
   .code-row input{flex:1;letter-spacing:4px}
   .code-row .btn-plain{white-space:nowrap;padding:0 14px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer}
@@ -349,7 +403,9 @@
   .me-avatar{font-size:40px;width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center}
   .me-info{flex:1;min-width:160px}
   .me-info h2{margin:0 0 4px;font-size:20px}
-  .me-info .meta{margin:0 0 6px;opacity:.85}
+  .me-info .meta{margin:0 0 6px;opacity:1;color:#eef3ff;font-weight:500}
+  .me-stats .review-kpi span{opacity:.96;font-weight:600;letter-spacing:.3px}
+  .me-display-name{color:#f0f4ff!important;font-weight:500}
   .me-info .chip{background:rgba(255,255,255,.2);color:#fff;border:none;margin-left:0}
   .me-stats{display:flex;gap:10px}
   .me-stats .review-kpi{background:rgba(255,255,255,.16);min-width:104px;padding:10px 14px}
@@ -630,13 +686,23 @@
       <h2 id="me-username"></h2>
       <p class="me-display-name" id="me-display-name"></p>
       <p class="meta" id="me-email"></p>
-      <span class="chip" id="me-role"></span>
     </div>
     <div class="me-stats">
       <div class="review-kpi"><strong id="me-total">0</strong><span>错题总数</span></div>
       <div class="review-kpi"><strong id="me-mastered">0</strong><span>已掌握</span></div>
       <div class="review-kpi"><strong id="me-due">0</strong><span>今日待复习</span></div>
     </div>
+    <div class="me-level" id="me-level" title="点击查看每日任务">
+      <span class="level-badge" id="me-level-badge"><b>Lv1</b><small>初识</small></span>
+      <div class="level-main">
+        <div class="level-title-row">
+          <span class="level-title" id="me-level-title">数据萌新</span>
+          <span class="level-exp-text" id="me-exp-text">0 / 50</span>
+        </div>
+        <div class="exp-bar"><i id="me-exp-fill"></i></div>
+      </div>
+    </div>
+    <div class="level-hint">✨ 点击经验条查看每日任务，登录 / 复习 / 新增错题 / 讨论互动都能获得经验</div>
     <div class="me-bio" id="me-bio"></div>
   </div>
   <div class="me-section">
@@ -694,9 +760,9 @@
 </div>
 
 <!-- AI 浮窗 -->
-<button id="ai-fab" title="AI 错题助手"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg></button>
+<button id="ai-fab" title="AI 错题助手"><img class="fab-tutor" src="/assets/ai-tutor-small.png" alt="AI助手" onerror="this.style.display='none'"></button>
 <div id="ai-panel" hidden>
-  <div class="ai-head"><span class="ai-head-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg></span> AI 错题助手 <span class="ai-model-chip" id="ai-model-chip" hidden></span>
+  <div class="ai-head"><img class="ai-tutor-head" src="/assets/ai-tutor.png" alt="AI" onerror="this.remove()"> AI 学姐助手 <span class="ai-model-chip" id="ai-model-chip" hidden></span>
     <button id="ai-settings-btn" title="设置 API">⚙️</button>
     <button id="ai-close" title="收起">✕</button>
   </div>
@@ -751,6 +817,25 @@
   </div>
 </div>
 
+<!-- 每日任务弹窗 -->
+<div class="modal-mask" id="task-modal" hidden>
+  <div class="modal" style="max-width:480px">
+    <div class="task-head-row">
+      <span class="lv-pill" id="task-lv-pill">Lv1</span>
+      <div style="flex:1">
+        <div style="font-weight:800;font-size:16px" id="task-title">每日任务</div>
+        <div class="meta" id="task-sub">完成任务自动发放经验</div>
+      </div>
+      <button class="text-btn" id="task-close">✕</button>
+    </div>
+    <div class="exp-bar" style="background:#e7eaf2;margin:6px 0 4px"><i id="task-exp-fill" style="background:linear-gradient(90deg,#f59e0b,#ec4899)"></i></div>
+    <div class="meta" id="task-exp-text" style="margin-bottom:6px"></div>
+    <div class="task-list" id="task-list"></div>
+  </div>
+</div>
+<!-- 升级提示 -->
+<div class="level-toast" id="level-toast"></div>
+
 <!-- 个人资料编辑弹窗 -->
 <div class="modal-mask" id="profile-modal" hidden>
   <div class="modal" style="max-width:460px">
@@ -764,7 +849,9 @@
         <div class="profile-meta">建议正方形图片，自动压缩；也可在下方选择默认头像。</div>
       </div>
     </div>
-    <label style="font-size:13px;font-weight:600;color:#4b5163">默认头像（按用户名配色）</label>
+    <div class="picker-section-title">🐾 可爱卡通头像</div>
+    <div class="avatar-picker" id="pf-cartoon"></div>
+    <div class="picker-section-title">🔤 字母渐变头像（按用户名配色）</div>
     <div class="avatar-picker" id="pf-picker"></div>
     <label style="font-size:13px;font-weight:600;color:#4b5163">昵称（选填）</label>
     <input id="pf-display-name" maxlength="40" placeholder="给自己起个昵称">
@@ -951,6 +1038,70 @@ function paintAllAvatars(user){
   paintAvatar(document.getElementById('me-avatar'),user);
 }
 
+/* ================= 等级 / 经验 / 每日任务 ================= */
+let levelState=null;
+function paintLevel(s){
+  if(!s)return;
+  const badge=document.getElementById('me-level-badge');
+  if(badge){
+    badge.style.background='linear-gradient(135deg,'+s.color1+','+s.color2+')';
+    badge.querySelector('b').textContent='Lv'+s.level;
+    badge.querySelector('small').textContent=s.tier;
+  }
+  const setText=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+  setText('me-level-title',s.title);
+  setText('me-exp-text',s.maxed?'已达最高等级':(s.into_level+' / '+s.span));
+  const fill=document.getElementById('me-exp-fill');if(fill)fill.style.width=Math.round(s.progress*100)+'%';
+}
+async function loadLevel(){
+  try{
+    const r=await fetch('/api/level');if(!r.ok)return null;
+    const s=await r.json();levelState=s;paintLevel(s);return s;
+  }catch(e){return null;}
+}
+function renderTasks(s){
+  const pill=document.getElementById('task-lv-pill');
+  pill.textContent='Lv'+s.level+' · '+s.title;
+  pill.style.background='linear-gradient(135deg,'+s.color1+','+s.color2+')';
+  document.getElementById('task-sub').textContent='今日已获得 '+s.gained_today+' 经验 · 完成 '+s.done_count+'/'+s.task_total+' 个任务';
+  document.getElementById('task-exp-fill').style.width=Math.round(s.progress*100)+'%';
+  document.getElementById('task-exp-text').textContent=s.maxed?('总经验 '+s.exp+' · 已达最高等级'):('总经验 '+s.exp+' · 距 Lv'+(s.level+1)+' 还需 '+(s.span-s.into_level)+' 经验');
+  const box=document.getElementById('task-list');box.innerHTML='';
+  s.tasks.forEach(t=>{
+    const pct=Math.min(100,Math.round(t.current/t.target*100));
+    const d=document.createElement('div');d.className='task-item'+(t.done?' done':'');
+    d.innerHTML='<div class="task-check">'+(t.done?'✓':'')+'</div>'+
+      '<div class="task-info"><div class="t-name">'+esc(t.label)+'</div>'+
+      '<div class="task-mini-bar"><i style="width:'+pct+'%"></i></div></div>'+
+      '<div class="task-reward">'+(t.done?'已领取 +'+t.reward:('+'+t.reward+' 经验'))+' · '+t.current+'/'+t.target+'</div>';
+    box.appendChild(d);
+  });
+}
+function openTaskModal(){
+  const show=()=>{if(levelState)renderTasks(levelState);document.getElementById('task-modal').hidden=false;};
+  if(levelState)show();else loadLevel().then(()=>show());
+}
+let levelToastTimer=null;
+function showLevelToast(msg){
+  const el=document.getElementById('level-toast');if(!el)return;
+  el.textContent=msg;el.classList.add('show');
+  clearTimeout(levelToastTimer);
+  levelToastTimer=setTimeout(()=>el.classList.remove('show'),2800);
+}
+function handleLevelResult(r){
+  if(!r)return;
+  const tasks=r.finished_tasks||[];
+  if(tasks.length){
+    const sum=tasks.reduce((a,t)=>a+(t.reward||0),0);
+    showLevelToast('🎯 完成「'+tasks.map(t=>t.label).join('、')+'」 +'+sum+' 经验');
+  }
+  if(r.leveled&&r.leveled[1]>r.leveled[0]){
+    const lv=r.leveled[1];
+    setTimeout(()=>showLevelToast('🎉 恭喜升级到 Lv'+lv+'！'),tasks.length?1500:0);
+  }
+  loadLevel();
+}
+
 /* ================= 账号、数据库与同步 ================= */
 let currentUser=null,todayQueue=[],todayStats={due:0,reviewed_today:0},activeCategory='全部';
 function deviceId(){
@@ -1033,7 +1184,7 @@ async function initAccount(){
     await enterAccount(j.user);
   }catch(e){if(e.message!=='AUTH_REQUIRED')document.getElementById('header-stats').textContent='暂时无法连接数据服务';}
 }
-async function enterAccount(user){
+async function enterAccount(user, levelResult){
   currentUser=user;hideAuth();
   document.getElementById('user-area').hidden=false;
   document.getElementById('user-name').textContent=user.display_name||user.username;
@@ -1041,6 +1192,7 @@ async function enterAccount(user){
   document.getElementById('ai-settings-btn').hidden=!user.is_admin;
   if(user.is_admin){document.getElementById('tab-analytics-btn').hidden=false;}
   await loadQuestions();await loadToday();refreshCurrentModel();
+  loadLevel().then(()=>{ if(levelResult)handleLevelResult(levelResult); });
 }
 const EMAIL_RE=/^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
 function setAuthState(msg){document.getElementById('auth-state').textContent=msg;}
@@ -1080,7 +1232,7 @@ async function submitLogin(){
   try{
     const j=await postAuth('/api/auth/login',payload);
     if(j.account_selection_required){beginLoginAccountSelection(j,remember);return;}
-    setAuthState('');await enterAccount(j.user);
+    setAuthState('');await enterAccount(j.user,j.level);
   }catch(e){setAuthState('❌ '+e.message);}
 }
 document.getElementById('auth-login-accounts').addEventListener('click',async e=>{
@@ -1088,7 +1240,7 @@ document.getElementById('auth-login-accounts').addEventListener('click',async e=
   setAuthState('正在进入所选账号…');
   try{
     const j=await postAuth('/api/auth/login',{selection_token:pendingAuthFlow.token,account_id:btn.dataset.accountId,remember_me:pendingAuthFlow.remember});
-    await enterAccount(j.user);
+    await enterAccount(j.user,j.level);
   }catch(err){setAuthState('❌ '+err.message);}
 });
 async function submitRegister(){
@@ -1108,7 +1260,7 @@ async function submitRegister(){
   setAuthState('正在创建账号…');
   try{
     const j=await postAuth('/api/auth/register',payload);
-    setAuthState(j.imported?'已导入 '+j.imported+' 道本地错题。':'');await enterAccount(j.user);
+    setAuthState(j.imported?'已导入 '+j.imported+' 道本地错题。':'');await enterAccount(j.user,j.level);
   }catch(e){setAuthState('❌ '+e.message);}
 }
 async function sendCode(purpose){
@@ -1287,8 +1439,9 @@ document.getElementById('review-reveal').addEventListener('click',()=>{
 document.querySelectorAll('.rating-btn').forEach(btn=>btn.addEventListener('click',async()=>{
   if(!todayQueue.length)return;document.querySelectorAll('.rating-btn').forEach(b=>b.disabled=true);
   try{
-    await apiJson('/api/review',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question_id:todayQueue[0].id,rating:Number(btn.dataset.rating),device_id:deviceId()})});
+    const rl=await apiJson('/api/review',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question_id:todayQueue[0].id,rating:Number(btn.dataset.rating),device_id:deviceId()})});
     todayQueue.shift();todayStats.due=Math.max(0,todayStats.due-1);todayStats.reviewed_today+=1;renderReview();loadQuestions();loadReviewHistory();
+    if(rl&&rl.level)handleLevelResult(rl.level);
   }catch(e){alert('保存复习记录失败：'+e.message);}
   finally{document.querySelectorAll('.rating-btn').forEach(b=>b.disabled=false);}
 }));
@@ -1371,7 +1524,7 @@ function renderMe(){
   const dnEl=document.getElementById('me-display-name');
   dnEl.textContent=currentUser.display_name?('账号：'+currentUser.username):'';
   document.getElementById('me-email').textContent=currentUser.email||'未绑定邮箱';
-  document.getElementById('me-role').textContent=currentUser.is_admin?'站点管理员':'普通成员';
+  loadLevel();
   const bioEl=document.getElementById('me-bio');
   if(currentUser.bio){bioEl.textContent=currentUser.bio;bioEl.classList.add('show');}else{bioEl.classList.remove('show');bioEl.textContent='';}
   document.getElementById('me-total').textContent=D.length;
@@ -1461,19 +1614,33 @@ function openProfileModal(){
   // 预览当前头像
   if(currentUser.avatar){paintPfPreview(currentUser.avatar);}
   else{paintPfPreviewInitial();}
-  // 渲染默认头像选择网格
-  const picker=document.getElementById('pf-picker');picker.innerHTML='';
   const baseName=currentUser.display_name||currentUser.username;
+  const picker=document.getElementById('pf-picker');
+  const cartoonBox=document.getElementById('pf-cartoon');
+  picker.innerHTML='';cartoonBox.innerHTML='';
+  const clearSel=()=>{picker.querySelectorAll('.av-opt').forEach(x=>x.classList.remove('selected'));
+                      cartoonBox.querySelectorAll('.av-opt').forEach(x=>x.classList.remove('selected'));};
+  // 可爱卡通头像
+  const CARTOONS=['fox','cat','owl','bear','penguin','rabbit','dino','shiba'];
+  CARTOONS.forEach(name=>{
+    const opt=document.createElement('div');opt.className='av-opt av-cartoon';opt.title='卡通头像';
+    const im=document.createElement('img');im.src='/assets/avatars/'+name+'.png';im.alt=name;
+    opt.appendChild(im);
+    opt.addEventListener('click',()=>{
+      pfPendingAvatar='/assets/avatars/'+name+'.png';
+      clearSel();opt.classList.add('selected');paintPfPreview(pfPendingAvatar);
+    });
+    cartoonBox.appendChild(opt);
+  });
+  // 字母渐变头像
   AVATAR_THEMES.forEach((pair,i)=>{
     const opt=document.createElement('div');opt.className='av-opt';
     opt.style.background='linear-gradient(135deg,'+pair[0]+','+pair[1]+')';
     opt.textContent=(baseName.trim()[0]||'?').toUpperCase();
-    opt.title='默认头像 '+(i+1);
+    opt.title='渐变头像 '+(i+1);
     opt.addEventListener('click',()=>{
       pfPendingAvatar=defaultAvatarDataUrl(baseName,i);
-      picker.querySelectorAll('.av-opt').forEach(x=>x.classList.remove('selected'));
-      opt.classList.add('selected');
-      paintPfPreview(pfPendingAvatar);
+      clearSel();opt.classList.add('selected');paintPfPreview(pfPendingAvatar);
     });
     picker.appendChild(opt);
   });
@@ -1497,7 +1664,7 @@ function processAvatarFile(file){
       if(dataUrl.length>300000){dataUrl=canvas.toDataURL('image/jpeg',0.7);}
       pfPendingAvatar=dataUrl;
       paintPfPreview(dataUrl);
-      document.getElementById('pf-picker').querySelectorAll('.av-opt').forEach(x=>x.classList.remove('selected'));
+      ['pf-picker','pf-cartoon'].forEach(id=>document.getElementById(id).querySelectorAll('.av-opt').forEach(x=>x.classList.remove('selected')));
       setPfState('✅ 已裁剪为正方形头像，保存后生效');
     };
     img.onerror=()=>setPfState('⛔ 图片读取失败，请换一张');
@@ -1505,6 +1672,11 @@ function processAvatarFile(file){
   };
   reader.readAsDataURL(file);
 }
+/* 每日任务弹窗 */
+document.getElementById('me-level').addEventListener('click',openTaskModal);
+document.getElementById('task-close').addEventListener('click',()=>{document.getElementById('task-modal').hidden=true;});
+document.getElementById('task-modal').addEventListener('click',e=>{if(e.target.id==='task-modal')e.target.hidden=true;});
+
 document.getElementById('profile-edit-btn').addEventListener('click',openProfileModal);
 document.getElementById('me-avatar').addEventListener('click',openProfileModal);
 document.getElementById('pf-cancel').addEventListener('click',closeProfileModal);
@@ -1914,21 +2086,35 @@ function sysPrompt(){
   const D=window.__QUIZ_DATA__.map(q=>`【${q.no}】${q.title}｜知识点:${q.cat}｜错误类型:${q.errtype}｜难度:${q.diff}｜日期:${q.date}｜状态:${q.status}｜做错${q.times}次｜一句话错因:${q.summary}`);
   return '你是 SQL 错题本的数据分析助手。下面是用户错题的结构化数据：\n'+D.join('\n')+'\n请基于这些数据回答，能引用具体题号时引用题号，给出可执行的复习建议。';
 }
+function aiAvatarEl(){
+  const im=document.createElement('img');im.className='msg-avatar';im.src='/assets/ai-tutor.png';im.alt='AI';
+  im.onerror=function(){this.remove();};return im;
+}
+function userAvatarEl(){
+  const d=document.createElement('div');d.className='msg-avatar avatar';
+  paintAvatar(d,currentUser);return d;
+}
 function addMsg(role,text){
   const box=document.getElementById('ai-msgs');
+  if(role==='ai'||role==='user'){
+    const row=document.createElement('div');row.className='msg-row '+role;
+    row.appendChild(role==='ai'?aiAvatarEl():userAvatarEl());
+    const d=document.createElement('div');d.className='msg '+role;d.textContent=text;
+    row.appendChild(d);box.appendChild(row);box.scrollTop=box.scrollHeight;return d;
+  }
   const d=document.createElement('div');
-  d.className='msg '+role;
-  d.textContent=text;
-  box.appendChild(d);box.scrollTop=box.scrollHeight;
-  return d;
+  d.className='msg '+role;d.textContent=text;
+  box.appendChild(d);box.scrollTop=box.scrollHeight;return d;
 }
 function typing(){
   const box=document.getElementById('ai-msgs');
-  const d=document.createElement('div');
-  d.className='msg ai';d.id='ai-typing';d.textContent='思考中…';
-  box.appendChild(d);box.scrollTop=box.scrollHeight;
+  const row=document.createElement('div');row.className='msg-row ai';row.id='ai-typing-row';
+  row.appendChild(aiAvatarEl());
+  const d=document.createElement('div');d.className='msg ai';d.id='ai-typing';d.textContent='思考中…';
+  row.appendChild(d);
+  box.appendChild(row);box.scrollTop=box.scrollHeight;
 }
-function doneTyping(){const t=document.getElementById('ai-typing');if(t)t.remove();}
+function doneTyping(){const r=document.getElementById('ai-typing-row');if(r)r.remove();const t=document.getElementById('ai-typing');if(t)t.remove();}
 function sendMsg(text){
   text=(text||document.getElementById('ai-input').value).trim();
   if(!text)return;
