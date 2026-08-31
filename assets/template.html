@@ -458,6 +458,16 @@
 .ai-chat-input-row input{flex:1;padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-family:inherit}
 .ai-chat-input-row button{padding:6px 16px;background:#4f46e5;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap;font-weight:500}
 .ai-chat-input-row button:disabled{opacity:.5;cursor:not-allowed}
+
+/* 欢迎说明与讨论室 */
+.welcome-guide{position:fixed;inset:0;z-index:80;background:rgba(15,23,42,.42);display:flex;align-items:center;justify-content:center;padding:20px;cursor:pointer}
+.welcome-card{width:min(520px,94vw);background:#fff;border-radius:20px;padding:28px;box-shadow:0 24px 80px rgba(15,23,42,.25);text-align:center}
+.welcome-card h2{margin:0 0 10px;font-size:24px}.welcome-card p{color:#64748b;margin:6px 0}.welcome-card .welcome-tip{margin-top:18px;color:var(--brand);font-weight:700;font-size:13px}
+.community-shell{max-width:820px;margin:0 auto}.community-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:16px}.community-head h2{margin:0}.community-head p{margin:4px 0 0;color:var(--muted);font-size:13px}
+.community-compose,.community-post{background:#fff;border:1px solid var(--line);border-radius:15px;padding:16px;margin-bottom:14px}.community-compose textarea{width:100%;min-height:88px;resize:vertical;border:1px solid var(--line);border-radius:10px;padding:11px;font:inherit;outline:none}.community-compose textarea:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
+.community-compose-foot{display:flex;align-items:center;justify-content:space-between;margin-top:8px;color:var(--muted);font-size:12px}.community-author{display:flex;align-items:center;gap:10px;cursor:pointer}.community-author .avatar{width:38px;height:38px}.community-author b{display:block}.community-author small{color:var(--muted)}.community-content{white-space:pre-wrap;overflow-wrap:anywhere;margin:13px 0;line-height:1.7}.community-actions{display:flex;gap:8px;border-top:1px solid #f0f2f6;padding-top:10px}.community-actions button{border:0;background:#f7f8fb;color:#526074;border-radius:8px;padding:7px 11px;cursor:pointer}.community-actions button.active{background:#fee2e2;color:#dc2626}.community-comments{margin-top:10px}.community-comment{display:flex;gap:8px;background:#f8fafc;border-radius:9px;padding:8px 10px;margin-top:7px;font-size:13px}.community-comment b{cursor:pointer}.community-comment-form{display:flex;gap:8px;margin-top:9px}.community-comment-form input{flex:1;border:1px solid var(--line);border-radius:8px;padding:8px 10px}.community-empty{text-align:center;color:var(--muted);padding:42px 15px}
+.account-list{display:grid;gap:9px;margin:12px 0}.account-choice{width:100%;display:flex;align-items:center;gap:10px;text-align:left;background:#f8fafc;border:1px solid var(--line);border-radius:11px;padding:10px;cursor:pointer}.account-choice:hover,.account-choice.selected{border-color:var(--brand);background:var(--brand-soft)}.account-choice .avatar{width:38px;height:38px}.auth-link-row{display:flex;justify-content:space-between;gap:12px;margin-top:10px;font-size:12.5px}.auth-link-row a{color:var(--brand);text-decoration:none}.public-profile-head{display:flex;gap:14px;align-items:center}.public-profile-head .avatar{width:64px;height:64px}.public-profile-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:15px 0}.public-profile-stats div{text-align:center;background:#f8fafc;border-radius:10px;padding:9px}.public-profile-stats strong{display:block;font-size:20px;color:var(--brand)}
+@media(max-width:700px){.community-head{align-items:flex-start;flex-direction:column}.community-actions{justify-content:space-between}.community-actions button{padding:7px 8px}.welcome-card{padding:22px}.tabbar{overflow-x:auto;scrollbar-width:none}.tab{white-space:nowrap;padding:8px 12px}}
 </style>
 </head>
 <body>
@@ -475,6 +485,7 @@
     <button class="tab" data-tab="list">📚 错题列表</button>
     <button class="tab" data-tab="trend">📊 趋势分析</button>
     <button class="tab" data-tab="search">🔍 智能检索</button>
+    <button class="tab" data-tab="community">💬 讨论室</button>
     <button class="tab" data-tab="me">👤 我的</button>
     <button class="tab" data-tab="analytics" id="tab-analytics-btn" hidden>📈 数据分析</button>
   </div>
@@ -599,7 +610,19 @@
   </div>
 </section>
 
-<!-- ⑤ 个人主页 -->
+<!-- ⑤ 讨论室 -->
+<section id="tab-community" class="panel" hidden>
+  <div class="community-shell">
+    <div class="community-head"><div><h2>💬 讨论室</h2><p>交流 SQL 思路、错题心得和复习方法。</p></div><button class="btn-plain" id="community-refresh">刷新</button></div>
+    <div class="community-compose">
+      <textarea id="community-content" maxlength="1000" placeholder="分享一个问题、解题思路或学习心得…"></textarea>
+      <div class="community-compose-foot"><span>最多 1000 字 · 发帖需要登录</span><button class="btn-primary" id="community-publish">发布</button></div>
+    </div>
+    <div id="community-list"><div class="community-empty">正在加载讨论…</div></div>
+  </div>
+</section>
+
+<!-- ⑥ 个人主页 -->
 <section id="tab-me" class="panel" hidden>
   <div class="me-card">
     <div class="me-avatar" id="me-avatar" title="点击更换头像"></div>
@@ -660,6 +683,15 @@
 </section>
 
 <footer>账号数据、复习记录与同步进度由服务端数据库保存 · Markdown 文件保留为可迁移备份</footer>
+
+<div class="welcome-guide" id="welcome-guide" hidden>
+  <div class="welcome-card">
+    <h2>欢迎使用 SQL 错题本</h2>
+    <p>系统会按记忆节奏自动安排“今日复习”，讨论室无需登录即可浏览。</p>
+    <p>添加错题、使用 AI 或进入“我的”时，再登录或创建账号。</p>
+    <div class="welcome-tip">点击任意位置开始使用</div>
+  </div>
+</div>
 
 <!-- AI 浮窗 -->
 <button id="ai-fab" title="AI 错题助手"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg></button>
@@ -807,7 +839,7 @@
       </div>
       <div id="auth-login-code-view" hidden>
         <label>邮箱</label><input id="auth-login-email" type="email" autocomplete="email" placeholder="name@example.com">
-        <label>验证码</label>
+        <label>登录验证码</label>
         <div class="code-row">
           <input id="auth-login-code" inputmode="numeric" maxlength="6" placeholder="6 位数字">
           <button type="button" class="btn-plain" id="auth-login-send">发送验证码</button>
@@ -817,6 +849,7 @@
         <a href="javascript:void(0)" id="auth-toggle-code-login" hidden>📲 验证码登录</a>
         <a href="javascript:void(0)" id="auth-toggle-pass-login" hidden>🔑 密码登录</a>
       </div>
+      <div class="auth-link-row"><span></span><a href="javascript:void(0)" id="auth-forgot">忘记密码？使用注册邮箱找回</a></div>
       <div class="auth-actions"><button class="btn-primary" id="auth-login">登录</button></div>
       <div class="auth-alt">还没有账号？<a href="javascript:void(0)" id="auth-goto-register">创建账号 →</a></div>
     </div>
@@ -825,7 +858,7 @@
       <label>密码</label><input id="auth-reg-password" type="password" autocomplete="new-password" placeholder="至少 8 个字符">
       <label>邮箱</label><input id="auth-reg-email" type="email" autocomplete="email" placeholder="name@example.com">
       <div id="auth-reg-code-row" hidden>
-        <label>邮箱验证码</label>
+        <label>注册验证码</label>
         <div class="code-row">
           <input id="auth-reg-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="6 位数字">
           <button type="button" class="btn-plain" id="auth-send-code">发送验证码</button>
@@ -835,9 +868,34 @@
       <div class="auth-actions"><button class="btn-primary" id="auth-register">创建账号</button></div>
       <div class="auth-alt">已有账号？<a href="javascript:void(0)" id="auth-goto-login">← 返回登录</a></div>
     </div>
+    <div id="auth-reset-view" hidden>
+      <label>注册邮箱</label><input id="auth-reset-email" type="email" autocomplete="email" placeholder="name@example.com">
+      <label>找回密码验证码</label>
+      <div class="code-row">
+        <input id="auth-reset-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="6 位数字">
+        <button type="button" class="btn-plain" id="auth-reset-send">发送找回验证码</button>
+      </div>
+      <div id="auth-reset-account-wrap" hidden><label>选择要重置的账号</label><div class="account-list" id="auth-reset-accounts"></div></div>
+      <div id="auth-reset-password-wrap" hidden>
+        <label>新密码</label><input id="auth-reset-password" type="password" autocomplete="new-password" placeholder="至少 8 个字符">
+        <label>确认新密码</label><input id="auth-reset-confirm" type="password" autocomplete="new-password" placeholder="再次输入新密码">
+      </div>
+      <div class="auth-actions"><button class="btn-primary" id="auth-reset-next">验证邮箱</button></div>
+      <div class="auth-alt"><a href="javascript:void(0)" id="auth-reset-back">← 返回登录</a></div>
+    </div>
+    <div id="auth-account-view" hidden>
+      <h3 style="margin:0 0 4px">选择登录账号</h3>
+      <p class="meta">这个邮箱绑定了多个账号，请选择本次要进入的账号。</p>
+      <div class="account-list" id="auth-login-accounts"></div>
+      <div class="auth-alt"><a href="javascript:void(0)" id="auth-account-back">← 重新登录</a></div>
+    </div>
     <label class="auth-remember"><input type="checkbox" id="auth-remember" checked> 30 天内自动登录</label>
     <div class="auth-state" id="auth-state"></div>
   </div>
+</div>
+
+<div class="modal-mask" id="public-profile-modal" hidden>
+  <div class="modal"><div id="public-profile-body"></div><div class="mrow"><button class="btn-plain" id="public-profile-close">关闭</button></div></div>
 </div>
 
 <script>
@@ -905,8 +963,9 @@ async function apiJson(url,options){
   if(r.status===401){showAuth();throw new Error('AUTH_REQUIRED');}
   if(!r.ok)throw new Error(j.message||'请求失败');return j;
 }
-let registerCfg={email_code_required:false,email_code_login_available:false,will_import_local:false};
-let authMode='login-pass'; // login-pass | login-code | register
+let registerCfg={email_code_required:false,email_code_login_available:false,will_import_local:false,max_accounts_per_email:3};
+let authMode='login-pass'; // login-pass | login-code | register | reset | account-select
+let pendingAuthFlow=null;
 function refreshRegisterCfg(){
   fetch('/api/auth/register_config').then(r=>r.json()).then(c=>{
     registerCfg=c||registerCfg;
@@ -916,14 +975,18 @@ function refreshRegisterCfg(){
 }
 function showAuthView(mode){
   authMode=mode;
-  document.getElementById('auth-login-view').hidden=(mode==='register');
+  document.getElementById('auth-login-view').hidden=!['login-pass','login-code'].includes(mode);
   document.getElementById('auth-register-view').hidden=(mode!=='register');
+  document.getElementById('auth-reset-view').hidden=(mode!=='reset');
+  document.getElementById('auth-account-view').hidden=(mode!=='account-select');
   document.getElementById('auth-login-pass').hidden=(mode!=='login-pass');
   document.getElementById('auth-login-code-view').hidden=(mode!=='login-code');
   document.getElementById('auth-toggle-code-login').hidden=(mode==='login-code')||!registerCfg.email_code_login_available;
   document.getElementById('auth-toggle-pass-login').hidden=(mode!=='login-code');
+  document.getElementById('auth-remember').parentElement.hidden=(mode==='reset');
 }
 function showAuth(message){
+  pendingAuthFlow=null;
   document.getElementById('auth-modal').hidden=false;
   refreshRegisterCfg();
   showAuthView('login-pass');
@@ -941,7 +1004,7 @@ function startCodeCountdown(btn,sec){
 }
 function resetAllCodeBtns(){
   for(const id in codeTimers)clearInterval(codeTimers[id]);
-  ['auth-send-code','auth-login-send'].forEach(id=>{
+  ['auth-send-code','auth-login-send','auth-reset-send'].forEach(id=>{
     const b=document.getElementById(id);
     if(b){b.disabled=false;b.textContent='发送验证码';}
   });
@@ -949,17 +1012,26 @@ function resetAllCodeBtns(){
 }
 function hideAuth(){
   document.getElementById('auth-modal').hidden=true;
-  ['auth-username','auth-password','auth-login-email','auth-login-code','auth-reg-username','auth-reg-password','auth-reg-email','auth-reg-code','auth-reg-invite']
+  ['auth-username','auth-password','auth-login-email','auth-login-code','auth-reg-username','auth-reg-password','auth-reg-email','auth-reg-code','auth-reg-invite','auth-reset-email','auth-reset-code','auth-reset-password','auth-reset-confirm']
     .forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('auth-remember').checked=true;
+  pendingAuthFlow=null;
+  document.getElementById('auth-reset-account-wrap').hidden=true;
+  document.getElementById('auth-reset-password-wrap').hidden=true;
   resetAllCodeBtns();
 }
+function showWelcomeGuide(){document.getElementById('welcome-guide').hidden=false;}
+document.getElementById('welcome-guide').addEventListener('click',()=>{document.getElementById('welcome-guide').hidden=true;});
 async function initAccount(){
+  showWelcomeGuide();
   try{
     const j=await apiJson('/api/auth/me');
-    if(!j.authenticated){showAuth();return;}
+    if(!j.authenticated){
+      document.getElementById('review-loading').innerHTML='<strong>登录后生成今日复习计划</strong>你仍可先浏览讨论室；添加错题、使用 AI 或进入“我的”时再登录。';
+      return;
+    }
     await enterAccount(j.user);
-  }catch(e){if(e.message!=='AUTH_REQUIRED')showAuth('无法连接数据服务，请确认本地服务已启动。');}
+  }catch(e){if(e.message!=='AUTH_REQUIRED')document.getElementById('header-stats').textContent='暂时无法连接数据服务';}
 }
 async function enterAccount(user){
   currentUser=user;hideAuth();
@@ -977,6 +1049,16 @@ async function postAuth(path,payload){
   const j=await r.json().catch(()=>({}));
   if(!r.ok)throw new Error(j.message||('请求失败（HTTP '+r.status+'）'));
   return j;
+}
+function accountChoiceHtml(account){
+  return '<button type="button" class="account-choice" data-account-id="'+esc(account.id)+'">'+
+    '<span class="avatar" style="background-image:url(&quot;'+esc(userAvatarSrc(account))+'&quot;)"></span><span><b>'+
+    esc(account.display_name||account.username)+'</b><small>@'+esc(account.username)+'</small></span></button>';
+}
+function beginLoginAccountSelection(j,remember){
+  pendingAuthFlow={purpose:'login',token:j.selection_token,remember:remember};
+  document.getElementById('auth-login-accounts').innerHTML=(j.accounts||[]).map(accountChoiceHtml).join('');
+  showAuthView('account-select');setAuthState(j.message||'请选择要登录的账号。');
 }
 async function submitLogin(){
   const remember=document.getElementById('auth-remember').checked;
@@ -997,9 +1079,18 @@ async function submitLogin(){
   setAuthState(okMsg);
   try{
     const j=await postAuth('/api/auth/login',payload);
+    if(j.account_selection_required){beginLoginAccountSelection(j,remember);return;}
     setAuthState('');await enterAccount(j.user);
   }catch(e){setAuthState('❌ '+e.message);}
 }
+document.getElementById('auth-login-accounts').addEventListener('click',async e=>{
+  const btn=e.target.closest('[data-account-id]');if(!btn||!pendingAuthFlow)return;
+  setAuthState('正在进入所选账号…');
+  try{
+    const j=await postAuth('/api/auth/login',{selection_token:pendingAuthFlow.token,account_id:btn.dataset.accountId,remember_me:pendingAuthFlow.remember});
+    await enterAccount(j.user);
+  }catch(err){setAuthState('❌ '+err.message);}
+});
 async function submitRegister(){
   const username=document.getElementById('auth-reg-username').value.trim();
   const password=document.getElementById('auth-reg-password').value;
@@ -1021,16 +1112,19 @@ async function submitRegister(){
   }catch(e){setAuthState('❌ '+e.message);}
 }
 async function sendCode(purpose){
-  const isReg=(purpose==='register');
-  const email=(isReg?document.getElementById('auth-reg-email'):document.getElementById('auth-login-email')).value.trim();
-  const btn=document.getElementById(isReg?'auth-send-code':'auth-login-send');
-  if(!EMAIL_RE.test(email)||email.length>254){setAuthState('请先填写正确的邮箱，再发送验证码。');return;}
+  const inputIds={register:'auth-reg-email',login:'auth-login-email',reset:'auth-reset-email'};
+  const btnIds={register:'auth-send-code',login:'auth-login-send',reset:'auth-reset-send'};
+  const email=document.getElementById(inputIds[purpose]).value.trim();
+  const btn=document.getElementById(btnIds[purpose]);
+  if(!email){setAuthState('请先填写邮箱地址。');return;}
+  if(!EMAIL_RE.test(email)||email.length>254){setAuthState('邮箱格式不合法，请填写类似 name@example.com 的完整地址。');return;}
   btn.disabled=true;btn.textContent='发送中…';
   try{
     const r=await fetch('/api/auth/send_code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,purpose})});
     const j=await r.json().catch(()=>({}));
     if(r.ok&&j.ok){
-      setAuthState('✅ 验证码已发送到 '+email+'（'+(j.ttl_minutes||10)+' 分钟内有效，没收到就看看垃圾邮件）');
+      let extra=purpose==='register'?'；该邮箱还可创建 '+j.remaining_account_slots+' 个账号':'';
+      setAuthState('✅ '+(j.message||'验证码已发送')+'（'+(j.ttl_minutes||10)+' 分钟内有效'+extra+'，没收到请检查垃圾邮件）');
       startCodeCountdown(btn,j.resend_interval_seconds||60);
     }else{
       btn.disabled=false;btn.textContent='发送验证码';
@@ -1041,13 +1135,57 @@ async function sendCode(purpose){
     setAuthState('❌ 发送失败：本地服务未启动？');
   }
 }
+async function submitReset(){
+  const btn=document.getElementById('auth-reset-next');
+  if(pendingAuthFlow&&pendingAuthFlow.purpose==='reset'&&pendingAuthFlow.accountId){
+    const password=document.getElementById('auth-reset-password').value;
+    const confirm=document.getElementById('auth-reset-confirm').value;
+    if(password.length<8){setAuthState('新密码至少需要 8 个字符。');return;}
+    if(password!==confirm){setAuthState('两次输入的新密码不一致。');return;}
+    btn.disabled=true;setAuthState('正在重置密码…');
+    try{
+      const j=await postAuth('/api/auth/reset_password',{selection_token:pendingAuthFlow.token,account_id:pendingAuthFlow.accountId,new_password:password});
+      pendingAuthFlow=null;showAuthView('login-pass');setAuthState('✅ '+j.message);
+    }catch(e){setAuthState('❌ '+e.message);}
+    finally{btn.disabled=false;}
+    return;
+  }
+  const email=document.getElementById('auth-reset-email').value.trim();
+  const code=document.getElementById('auth-reset-code').value.trim();
+  if(!EMAIL_RE.test(email)||email.length>254){setAuthState('请填写正确的注册邮箱。');return;}
+  if(!/^\d{6}$/.test(code)){setAuthState('请填写邮箱收到的 6 位找回密码验证码。');return;}
+  btn.disabled=true;setAuthState('正在验证邮箱…');
+  try{
+    const j=await postAuth('/api/auth/reset_password',{email:email,email_code:code});
+    pendingAuthFlow={purpose:'reset',token:j.selection_token,accountId:null};
+    const accounts=j.accounts||[];
+    if(accounts.length===1){
+      pendingAuthFlow.accountId=accounts[0].id;
+      document.getElementById('auth-reset-account-wrap').hidden=true;
+    }else{
+      document.getElementById('auth-reset-accounts').innerHTML=accounts.map(accountChoiceHtml).join('');
+      document.getElementById('auth-reset-account-wrap').hidden=false;
+    }
+    document.getElementById('auth-reset-password-wrap').hidden=false;
+    btn.textContent='重置密码';setAuthState(j.message||'请设置新密码。');
+  }catch(e){setAuthState('❌ '+e.message);}
+  finally{btn.disabled=false;}
+}
+document.getElementById('auth-reset-accounts').addEventListener('click',e=>{
+  const choice=e.target.closest('[data-account-id]');if(!choice||!pendingAuthFlow)return;
+  document.querySelectorAll('#auth-reset-accounts .account-choice').forEach(x=>x.classList.remove('selected'));
+  choice.classList.add('selected');pendingAuthFlow.accountId=choice.dataset.accountId;
+  setAuthState('已选择账号，请设置新密码。');
+});
 document.getElementById('auth-login').addEventListener('click',submitLogin);
 document.getElementById('auth-register').addEventListener('click',submitRegister);
+document.getElementById('auth-reset-next').addEventListener('click',submitReset);
 document.getElementById('auth-password').addEventListener('keydown',e=>{if(e.key==='Enter')submitLogin();});
 document.getElementById('auth-login-code').addEventListener('keydown',e=>{if(e.key==='Enter')submitLogin();});
 document.getElementById('auth-reg-code').addEventListener('keydown',e=>{if(e.key==='Enter')submitRegister();});
 document.getElementById('auth-send-code').addEventListener('click',()=>sendCode('register'));
 document.getElementById('auth-login-send').addEventListener('click',()=>sendCode('login'));
+document.getElementById('auth-reset-send').addEventListener('click',()=>sendCode('reset'));
 document.getElementById('auth-toggle-code-login').addEventListener('click',()=>{
   showAuthView('login-code');setAuthState('输入注册时绑定的邮箱，接收验证码即可免密登录。');
 });
@@ -1061,6 +1199,15 @@ document.getElementById('auth-goto-register').addEventListener('click',()=>{
   document.getElementById('auth-reg-username').focus();
 });
 document.getElementById('auth-goto-login').addEventListener('click',()=>{showAuthView('login-pass');setAuthState('');});
+document.getElementById('auth-forgot').addEventListener('click',()=>{
+  pendingAuthFlow=null;showAuthView('reset');
+  document.getElementById('auth-reset-next').textContent='验证邮箱';
+  document.getElementById('auth-reset-account-wrap').hidden=true;
+  document.getElementById('auth-reset-password-wrap').hidden=true;
+  setAuthState('输入注册邮箱，获取“找回密码验证码”。');
+});
+document.getElementById('auth-reset-back').addEventListener('click',()=>{pendingAuthFlow=null;showAuthView('login-pass');setAuthState('');});
+document.getElementById('auth-account-back').addEventListener('click',()=>{pendingAuthFlow=null;showAuthView('login-code');setAuthState('');});
 /* 统一：点击弹窗遮罩区域自动关闭（在弹窗内按下拖拽到遮罩的误触不算） */
 document.querySelectorAll('.modal-mask').forEach(function(mask){
   mask.addEventListener('mousedown',function(e){mask._downOnMask=(e.target===mask);});
@@ -1073,7 +1220,8 @@ document.querySelectorAll('.modal-mask').forEach(function(mask){
 });
 document.getElementById('logout-btn').addEventListener('click',async()=>{
   await fetch('/api/auth/logout',{method:'POST'});currentUser=null;window.__QUIZ_DATA__=[];
-  document.getElementById('user-area').hidden=true;renderLibrary();showAuth('已安全退出。');
+  document.getElementById('user-area').hidden=true;document.getElementById('tab-analytics-btn').hidden=true;
+  renderLibrary();switchTab('community');document.getElementById('header-stats').textContent='已安全退出 · 可继续浏览讨论室';
 });
 
 function renderLibrary(){
@@ -1145,14 +1293,74 @@ document.querySelectorAll('.rating-btn').forEach(btn=>btn.addEventListener('clic
   finally{document.querySelectorAll('.rating-btn').forEach(b=>b.disabled=false);}
 }));
 
+/* ================= 讨论室 ================= */
+function communityUserName(u){return (u&&u.display_name)||(u&&u.username)||'用户';}
+function communityAvatar(u){return '<img class="avatar" src="'+esc(userAvatarSrc(u))+'" alt="">';}
+function communityTime(s){try{return new Date(s).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return String(s||'');}}
+function renderCommunity(posts){
+  const list=document.getElementById('community-list');
+  if(!posts.length){list.innerHTML='<div class="community-empty">还没有帖子，来发布第一条讨论吧。</div>';return;}
+  list.innerHTML=posts.map(p=>{
+    const comments=(p.comments||[]).map(c=>'<div class="community-comment"><span><b data-user-id="'+esc(c.author.id)+'">'+esc(communityUserName(c.author))+'</b>：'+esc(c.content)+'</span></div>').join('');
+    return '<article class="community-post" data-post-id="'+esc(p.id)+'">'+
+      '<div class="community-author" data-user-id="'+esc(p.author.id)+'">'+communityAvatar(p.author)+'<span><b>'+esc(communityUserName(p.author))+'</b><small>@'+esc(p.author.username)+' · '+esc(communityTime(p.created_at))+'</small></span></div>'+
+      '<div class="community-content">'+esc(p.content)+'</div><div class="community-actions">'+
+      '<button data-action="like" class="'+(p.liked?'active':'')+'">'+(p.liked?'♥':'♡')+' '+p.like_count+'</button>'+
+      '<button data-action="comment">💬 '+p.comment_count+'</button><button data-action="share">↗ '+p.share_count+'</button></div>'+
+      '<div class="community-comments">'+comments+'<div class="community-comment-form" hidden><input maxlength="500" placeholder="写下评论…"><button class="btn-primary" data-action="send-comment">发送</button></div></div></article>';
+  }).join('');
+}
+async function loadCommunity(){
+  const list=document.getElementById('community-list');list.innerHTML='<div class="community-empty">正在加载讨论…</div>';
+  try{const r=await fetch('/api/community/posts?limit=30');const j=await r.json();if(!r.ok)throw new Error(j.message||'加载失败');renderCommunity(j.posts||[]);}
+  catch(e){list.innerHTML='<div class="community-empty">暂时无法加载：'+esc(e.message)+'</div>';}
+}
+document.getElementById('community-refresh').addEventListener('click',loadCommunity);
+document.getElementById('community-content').addEventListener('focus',()=>{if(!currentUser)showAuth('发帖需要先登录。');});
+document.getElementById('community-publish').addEventListener('click',async()=>{
+  if(!currentUser){showAuth('发布讨论需要先登录。');return;}
+  const input=document.getElementById('community-content'),content=input.value.trim();
+  if(!content){alert('请先写一点内容。');return;}
+  try{await apiJson('/api/community/posts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content})});input.value='';await loadCommunity();}
+  catch(e){if(e.message!=='AUTH_REQUIRED')alert(e.message);}
+});
+document.getElementById('community-list').addEventListener('click',async e=>{
+  const author=e.target.closest('[data-user-id]');if(author){openCommunityProfile(author.dataset.userId);return;}
+  const post=e.target.closest('[data-post-id]'),button=e.target.closest('[data-action]');if(!post||!button)return;
+  const id=post.dataset.postId,action=button.dataset.action;
+  if(action==='comment'){if(!currentUser){showAuth('评论需要先登录。');return;}const form=post.querySelector('.community-comment-form');form.hidden=!form.hidden;if(!form.hidden)form.querySelector('input').focus();return;}
+  if(!currentUser){showAuth((action==='like'?'点赞':'转发')+'需要先登录。');return;}
+  try{
+    if(action==='like'){await apiJson('/api/community/like',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id})});await loadCommunity();}
+    if(action==='send-comment'){const input=post.querySelector('.community-comment-form input');if(!input.value.trim())return;await apiJson('/api/community/comments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id,content:input.value.trim()})});await loadCommunity();}
+    if(action==='share'){
+      await apiJson('/api/community/share',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id})});
+      const url=location.origin+location.pathname+'#discussion-'+id;
+      if(navigator.share)await navigator.share({title:'SQL 错题本讨论',url:url});else if(navigator.clipboard)await navigator.clipboard.writeText(url);
+      await loadCommunity();
+    }
+  }catch(err){if(err.name!=='AbortError'&&err.message!=='AUTH_REQUIRED')alert(err.message);}
+});
+async function openCommunityProfile(userId){
+  try{
+    const r=await fetch('/api/community/profile?id='+encodeURIComponent(userId)),j=await r.json();if(!r.ok)throw new Error(j.message||'读取失败');
+    const p=j.profile,u=p.user;
+    document.getElementById('public-profile-body').innerHTML='<div class="public-profile-head">'+communityAvatar(u)+'<div><h3 style="margin:0">'+esc(communityUserName(u))+'</h3><div class="meta">@'+esc(u.username)+'</div></div></div><p>'+esc(u.bio||'这个用户还没有填写简介。')+'</p><div class="public-profile-stats"><div><strong>'+p.post_count+'</strong>帖子</div><div><strong>'+p.comment_count+'</strong>评论</div><div><strong>'+p.received_likes+'</strong>获赞</div></div>';
+    document.getElementById('public-profile-modal').hidden=false;
+  }catch(e){alert(e.message);}
+}
+document.getElementById('public-profile-close').addEventListener('click',()=>{document.getElementById('public-profile-modal').hidden=true;});
+
 /* ================= Tab 切换 ================= */
 function switchTab(name){
+  if(name==='me'&&!currentUser){showAuth('进入“我的”需要先登录。');return;}
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
   const active=document.querySelector('.tab[data-tab="'+name+'"]');if(active)active.classList.add('active');
-  ['today','list','trend','search','analytics','me'].forEach(t=>{const el=document.getElementById('tab-'+t);if(el)el.hidden=(name!==t);});
+  ['today','list','trend','search','community','analytics','me'].forEach(t=>{const el=document.getElementById('tab-'+t);if(el)el.hidden=(name!==t);});
   if(name==='trend')renderTrend();
   if(name==='today')loadToday();
   if(name==='analytics')loadAnalytics();
+  if(name==='community')loadCommunity();
   if(name==='me')renderMe();
 }
 function renderMe(){
@@ -1883,7 +2091,7 @@ document.getElementById('add-cancel').addEventListener('click',()=>{document.get
 
 /* AI 面板开关 */
 const fab=document.getElementById('ai-fab'),panel=document.getElementById('ai-panel');
-fab.addEventListener('click',()=>{panel.hidden=!panel.hidden;});
+fab.addEventListener('click',()=>{if(!currentUser){showAuth('使用 AI 助手需要先登录。');return;}panel.hidden=!panel.hidden;});
 document.getElementById('ai-close').addEventListener('click',()=>{panel.hidden=true;});
 
 /* AI 设置 */

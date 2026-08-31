@@ -23,6 +23,8 @@ SESSION_DAYS = 30
 SESSION_RENEW_THRESHOLD_DAYS = SESSION_DAYS // 2  # 剩余不足一半时滑动续期
 FREE_AI_CALLS_PER_DAY = 3      # 使用站点默认模型时，每用户每日免费次数
 INVITE_BONUS_CALLS = 10        # 每邀请 1 位新用户，邀请人每日免费额度永久 +10
+MAX_ACCOUNTS_PER_EMAIL = 3
+AUTH_TICKET_TTL_MINUTES = 10
 PBKDF2_ITERATIONS = 240_000
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$")
 
@@ -160,6 +162,48 @@ def init_db():
               expires_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS auth_tickets (
+              token_hash TEXT PRIMARY KEY,
+              email_norm TEXT NOT NULL,
+              purpose TEXT NOT NULL,
+              used_at TEXT,
+              created_at TEXT NOT NULL,
+              expires_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS community_posts (
+              id TEXT PRIMARY KEY,
+              user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              content TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              deleted_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS community_comments (
+              id TEXT PRIMARY KEY,
+              post_id TEXT NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+              user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              content TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              deleted_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS community_likes (
+              post_id TEXT NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+              user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              created_at TEXT NOT NULL,
+              PRIMARY KEY(post_id, user_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS community_shares (
+              post_id TEXT NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+              user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              created_at TEXT NOT NULL,
+              PRIMARY KEY(post_id, user_id)
+            );
+
             CREATE INDEX IF NOT EXISTS idx_sessions_user_expiry
               ON sessions(user_id, expires_at);
             CREATE INDEX IF NOT EXISTS idx_questions_user_due
@@ -178,6 +222,18 @@ def init_db():
               ON user_events(device_id, created_at);
             CREATE INDEX IF NOT EXISTS idx_email_codes_email
               ON email_codes(email_norm, purpose, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_auth_tickets_email
+              ON auth_tickets(email_norm, purpose, expires_at);
+            CREATE INDEX IF NOT EXISTS idx_community_posts_created
+              ON community_posts(deleted_at, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_community_posts_user
+              ON community_posts(user_id, deleted_at, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_community_comments_post
+              ON community_comments(post_id, deleted_at, created_at);
+            CREATE INDEX IF NOT EXISTS idx_community_likes_post
+              ON community_likes(post_id);
+            CREATE INDEX IF NOT EXISTS idx_community_shares_post
+              ON community_shares(post_id);
             """
         )
         user_columns = {row[1] for row in db.execute("PRAGMA table_info(users)")}
@@ -214,8 +270,9 @@ def init_db():
             db.execute("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''")
         if "email_norm" not in user_columns:
             db.execute("ALTER TABLE users ADD COLUMN email_norm TEXT NOT NULL DEFAULT ''")
+        db.execute("DROP INDEX IF EXISTS idx_users_email_norm")
         db.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_norm "
+            "CREATE INDEX IF NOT EXISTS idx_users_email_norm_lookup "
             "ON users(email_norm) WHERE email_norm != ''"
         )
         db.execute("DELETE FROM sessions WHERE expires_at <= ?", (_now(),))
@@ -247,8 +304,11 @@ def register_user(username, password, email, invite_code=None):
     with connect() as db:
         db.execute("BEGIN IMMEDIATE")
         first_user = db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
-        if db.execute("SELECT 1 FROM users WHERE email_norm=?", (email_norm,)).fetchone():
-            raise ValueError("该邮箱已被注册。")
+        account_count = db.execute(
+            "SELECT COUNT(*) FROM users WHERE email_norm=?", (email_norm,)
+        ).fetchone()[0]
+        if account_count >= MAX_ACCOUNTS_PER_EMAIL:
+            raise ValueError("该邮箱最多只能注册 %d 个账号。" % MAX_ACCOUNTS_PER_EMAIL)
         inviter_id = None
         code = str(invite_code or "").strip().upper()
         if code:
@@ -287,18 +347,35 @@ def email_registered(email_norm):
     return bool(row)
 
 
+def email_account_count(email):
+    email_norm = str(email or "").strip().casefold()
+    if not email_norm:
+        return 0
+    with connect() as db:
+        return int(db.execute(
+            "SELECT COUNT(*) FROM users WHERE email_norm=?", (email_norm,)
+        ).fetchone()[0])
+
+
+def users_by_email(email):
+    """返回邮箱下的全部账号；仅供验证码已验证后的账号选择流程使用。"""
+    email_norm = str(email or "").strip().casefold()
+    if not email_norm:
+        return []
+    with connect() as db:
+        rows = db.execute(
+            "SELECT * FROM users WHERE email_norm=? ORDER BY created_at,id", (email_norm,)
+        ).fetchall()
+    return [_user_public(row) for row in rows]
+
+
 def user_by_email(email):
     """按邮箱查用户（大小写不敏感）；不存在返回 None。"""
     email_norm = str(email or "").strip().casefold()
     if not email_norm:
         return None
-    with connect() as db:
-        row = db.execute(
-            "SELECT * FROM users WHERE email_norm!='' AND email_norm=?", (email_norm,)
-        ).fetchone()
-    if not row:
-        return None
-    return _user_public(row)
+    users = users_by_email(email_norm)
+    return users[0] if users else None
 
 
 # ---- 用户资料 ----
@@ -426,16 +503,22 @@ def invite_summary(user_id):
 def authenticate(username, password):
     identifier = str(username or "").strip().casefold()
     with connect() as db:
-        row = db.execute(
-            "SELECT * FROM users WHERE username_norm=? OR (email_norm!='' AND email_norm=?)",
-            (identifier, identifier),
+        username_row = db.execute(
+            "SELECT * FROM users WHERE username_norm=?", (identifier,)
         ).fetchone()
-    if not row:
-        return None
-    actual = _password_digest(str(password or ""), row["password_salt"])
-    if not hmac.compare_digest(actual, row["password_hash"]):
-        return None
-    return _user_public(row)
+        rows = ([username_row] if username_row else []) + list(db.execute(
+            "SELECT * FROM users WHERE email_norm!='' AND email_norm=? ORDER BY created_at,id",
+            (identifier,),
+        ).fetchall())
+    seen = set()
+    for row in rows:
+        if row["id"] in seen:
+            continue
+        seen.add(row["id"])
+        actual = _password_digest(str(password or ""), row["password_salt"])
+        if hmac.compare_digest(actual, row["password_hash"]):
+            return _user_public(row)
+    return None
 
 
 def create_session(user_id, persistent=True):
@@ -495,6 +578,69 @@ def delete_session(token):
     token_hash = hashlib.sha256(str(token).encode("ascii", "ignore")).hexdigest()
     with connect() as db:
         db.execute("DELETE FROM sessions WHERE token_hash=?", (token_hash,))
+
+
+def create_auth_ticket(email, purpose):
+    """验证码校验后签发短期、一次性的账号选择票据。"""
+    purpose = str(purpose or "").strip()
+    if purpose not in {"login", "reset"}:
+        raise ValueError("不支持的验证用途。")
+    email_norm = str(email or "").strip().casefold()
+    if not users_by_email(email_norm):
+        raise ValueError("该邮箱尚未绑定账号。")
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode("ascii")).hexdigest()
+    now_dt = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+    expires = now_dt + dt.timedelta(minutes=AUTH_TICKET_TTL_MINUTES)
+    with connect() as db:
+        db.execute("DELETE FROM auth_tickets WHERE expires_at<=? OR used_at IS NOT NULL", (_now(),))
+        db.execute(
+            "INSERT INTO auth_tickets(token_hash,email_norm,purpose,created_at,expires_at) "
+            "VALUES(?,?,?,?,?)",
+            (token_hash, email_norm, purpose,
+             now_dt.isoformat().replace("+00:00", "Z"),
+             expires.isoformat().replace("+00:00", "Z")),
+        )
+    return token
+
+
+def consume_auth_ticket(token, purpose, user_id):
+    """消费账号选择票据，并校验所选账号确实属于已验证邮箱。"""
+    token_hash = hashlib.sha256(str(token or "").encode("ascii", "ignore")).hexdigest()
+    with connect() as db:
+        db.execute("BEGIN IMMEDIATE")
+        ticket = db.execute(
+            "SELECT * FROM auth_tickets WHERE token_hash=? AND purpose=? "
+            "AND used_at IS NULL AND expires_at>?",
+            (token_hash, str(purpose or ""), _now()),
+        ).fetchone()
+        if not ticket:
+            raise ValueError("验证已失效，请重新获取验证码。")
+        row = db.execute(
+            "SELECT * FROM users WHERE id=? AND email_norm=?",
+            (str(user_id or ""), ticket["email_norm"]),
+        ).fetchone()
+        if not row:
+            raise ValueError("所选账号与已验证邮箱不匹配。")
+        db.execute("UPDATE auth_tickets SET used_at=? WHERE token_hash=?", (_now(), token_hash))
+    return _user_public(row)
+
+
+def update_password(user_id, new_password):
+    password = str(new_password or "")
+    if len(password) < 8:
+        raise ValueError("新密码至少需要 8 个字符。")
+    salt = secrets.token_hex(16)
+    with connect() as db:
+        db.execute("BEGIN IMMEDIATE")
+        if not db.execute("SELECT 1 FROM users WHERE id=?", (str(user_id or ""),)).fetchone():
+            raise ValueError("账号不存在。")
+        db.execute(
+            "UPDATE users SET password_salt=?,password_hash=?,updated_at=? WHERE id=?",
+            (salt, _password_digest(password, salt), _now(), str(user_id)),
+        )
+        db.execute("DELETE FROM sessions WHERE user_id=?", (str(user_id),))
+    return True
 
 
 # ==================== 注册邮箱验证码 ====================
@@ -1012,6 +1158,169 @@ def import_legacy_questions(user_id):
 
 
 # ==================== 用户行为分析 ====================
+
+def _community_user(row):
+    return {
+        "id": row["author_id"],
+        "username": row["username"],
+        "display_name": row["display_name"],
+        "avatar": row["avatar"],
+        "bio": row["bio"],
+    }
+
+
+def list_community_posts(viewer_id="", limit=30, author_id=""):
+    try:
+        limit = min(50, max(1, int(limit)))
+    except (TypeError, ValueError):
+        limit = 30
+    params = [str(viewer_id or "")]
+    where = "p.deleted_at IS NULL"
+    if author_id:
+        where += " AND p.user_id=?"
+        params.append(str(author_id))
+    params.append(limit)
+    with connect() as db:
+        rows = db.execute(
+            """SELECT p.id,p.user_id AS author_id,p.content,p.created_at,p.updated_at,
+                      u.username,u.display_name,u.avatar,u.bio,
+                      (SELECT COUNT(*) FROM community_likes l WHERE l.post_id=p.id) AS like_count,
+                      (SELECT COUNT(*) FROM community_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count,
+                      (SELECT COUNT(*) FROM community_shares s WHERE s.post_id=p.id) AS share_count,
+                      EXISTS(SELECT 1 FROM community_likes ml WHERE ml.post_id=p.id AND ml.user_id=?) AS liked
+               FROM community_posts p JOIN users u ON u.id=p.user_id
+               WHERE """ + where + " ORDER BY p.created_at DESC LIMIT ?",
+            params,
+        ).fetchall()
+        posts = []
+        for row in rows:
+            comments = db.execute(
+                """SELECT c.id,c.content,c.created_at,u.id AS author_id,
+                          u.username,u.display_name,u.avatar,u.bio
+                   FROM community_comments c JOIN users u ON u.id=c.user_id
+                   WHERE c.post_id=? AND c.deleted_at IS NULL
+                   ORDER BY c.created_at ASC LIMIT 50""",
+                (row["id"],),
+            ).fetchall()
+            posts.append({
+                "id": row["id"], "content": row["content"],
+                "created_at": row["created_at"], "updated_at": row["updated_at"],
+                "author": _community_user(row),
+                "like_count": int(row["like_count"]),
+                "comment_count": int(row["comment_count"]),
+                "share_count": int(row["share_count"]),
+                "liked": bool(row["liked"]),
+                "comments": [{
+                    "id": c["id"], "content": c["content"], "created_at": c["created_at"],
+                    "author": _community_user(c),
+                } for c in comments],
+            })
+    return posts
+
+
+def create_community_post(user_id, content):
+    content = str(content or "").strip()
+    if not content:
+        raise ValueError("帖子内容不能为空。")
+    if len(content) > 1000:
+        raise ValueError("帖子内容不能超过 1000 个字符。")
+    post_id, now = str(uuid.uuid4()), _now()
+    with connect() as db:
+        db.execute(
+            "INSERT INTO community_posts(id,user_id,content,created_at,updated_at) VALUES(?,?,?,?,?)",
+            (post_id, str(user_id), content, now, now),
+        )
+    return post_id
+
+
+def add_community_comment(user_id, post_id, content):
+    content = str(content or "").strip()
+    if not content:
+        raise ValueError("评论内容不能为空。")
+    if len(content) > 500:
+        raise ValueError("评论不能超过 500 个字符。")
+    comment_id, now = str(uuid.uuid4()), _now()
+    with connect() as db:
+        if not db.execute(
+            "SELECT 1 FROM community_posts WHERE id=? AND deleted_at IS NULL", (str(post_id),)
+        ).fetchone():
+            raise ValueError("帖子不存在或已删除。")
+        db.execute(
+            "INSERT INTO community_comments(id,post_id,user_id,content,created_at,updated_at) "
+            "VALUES(?,?,?,?,?,?)",
+            (comment_id, str(post_id), str(user_id), content, now, now),
+        )
+    return comment_id
+
+
+def toggle_community_like(user_id, post_id):
+    with connect() as db:
+        db.execute("BEGIN IMMEDIATE")
+        if not db.execute(
+            "SELECT 1 FROM community_posts WHERE id=? AND deleted_at IS NULL", (str(post_id),)
+        ).fetchone():
+            raise ValueError("帖子不存在或已删除。")
+        existing = db.execute(
+            "SELECT 1 FROM community_likes WHERE post_id=? AND user_id=?",
+            (str(post_id), str(user_id)),
+        ).fetchone()
+        if existing:
+            db.execute("DELETE FROM community_likes WHERE post_id=? AND user_id=?",
+                       (str(post_id), str(user_id)))
+            liked = False
+        else:
+            db.execute("INSERT INTO community_likes(post_id,user_id,created_at) VALUES(?,?,?)",
+                       (str(post_id), str(user_id), _now()))
+            liked = True
+        count = db.execute(
+            "SELECT COUNT(*) FROM community_likes WHERE post_id=?", (str(post_id),)
+        ).fetchone()[0]
+    return {"liked": liked, "like_count": int(count)}
+
+
+def share_community_post(user_id, post_id):
+    with connect() as db:
+        if not db.execute(
+            "SELECT 1 FROM community_posts WHERE id=? AND deleted_at IS NULL", (str(post_id),)
+        ).fetchone():
+            raise ValueError("帖子不存在或已删除。")
+        db.execute(
+            "INSERT OR IGNORE INTO community_shares(post_id,user_id,created_at) VALUES(?,?,?)",
+            (str(post_id), str(user_id), _now()),
+        )
+        count = db.execute(
+            "SELECT COUNT(*) FROM community_shares WHERE post_id=?", (str(post_id),)
+        ).fetchone()[0]
+    return {"share_count": int(count)}
+
+
+def public_community_profile(user_id, viewer_id=""):
+    with connect() as db:
+        row = db.execute(
+            "SELECT id AS author_id,username,display_name,avatar,bio,created_at FROM users WHERE id=?",
+            (str(user_id),),
+        ).fetchone()
+        if not row:
+            return None
+        post_count = db.execute(
+            "SELECT COUNT(*) FROM community_posts WHERE user_id=? AND deleted_at IS NULL",
+            (str(user_id),),
+        ).fetchone()[0]
+        comment_count = db.execute(
+            "SELECT COUNT(*) FROM community_comments WHERE user_id=? AND deleted_at IS NULL",
+            (str(user_id),),
+        ).fetchone()[0]
+        received_likes = db.execute(
+            "SELECT COUNT(*) FROM community_likes l JOIN community_posts p ON p.id=l.post_id "
+            "WHERE p.user_id=? AND p.deleted_at IS NULL", (str(user_id),)
+        ).fetchone()[0]
+    return {
+        "user": _community_user(row), "joined_at": row["created_at"],
+        "post_count": int(post_count), "comment_count": int(comment_count),
+        "received_likes": int(received_likes),
+        "posts": list_community_posts(viewer_id, limit=10, author_id=user_id),
+    }
+
 
 def record_event(user_id=None, device_id="", event_type="", page="", metadata=None, ip="", user_agent=""):
     """记录用户行为事件。user_id 为 None 表示未登录用户。"""

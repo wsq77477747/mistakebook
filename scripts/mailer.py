@@ -111,13 +111,28 @@ border-radius:10px;padding:16px 0;text-align:center;color:#1d4ed8;">{code}</div>
 </div>"""
 
 
-def send_verification_code(to, code, ttl_minutes=10):
-    """发送注册验证码邮件。未配置时抛 RuntimeError，SMTP 失败时抛 smtplib.SMTPException。"""
+_PURPOSE_CODE_MAIL_TMPL = """<div style="max-width:480px;margin:0 auto;font-family:'Microsoft YaHei',Arial,sans-serif;
+color:#222;border:1px solid #eee;border-radius:12px;padding:28px 32px;">
+  <h2 style="margin:0 0 4px;font-size:20px;">SQL 错题本 · {purpose_label}</h2>
+  <p style="margin:0 0 18px;color:#888;font-size:13px;">你正在进行“{purpose_label}”操作，验证码如下：</p>
+  <div style="font-size:32px;font-weight:700;letter-spacing:8px;background:#f5f6fa;
+border-radius:10px;padding:16px 0;text-align:center;color:#1d4ed8;">{code}</div>
+  <p style="margin:18px 0 4px;font-size:13px;color:#666;">
+    验证码 {ttl} 分钟内有效，请勿泄露给他人。若非本人操作，请忽略本邮件。</p>
+</div>"""
+
+
+def send_verification_code(to, code, ttl_minutes=10, purpose="register"):
+    """发送指定用途的验证码邮件。未配置时抛 RuntimeError，SMTP 失败时向上抛出。"""
     cfg = load_email_config()
     if not cfg:
         raise RuntimeError("邮件服务未配置")
-    html = _CODE_MAIL_TMPL.format(code=str(code), ttl=ttl_minutes)
-    _send_mail(cfg, to, "SQL 错题本注册验证码：%s" % code, html)
+    labels = {"register": "注册账号", "login": "登录账号", "reset": "找回密码"}
+    purpose_label = labels.get(str(purpose), "身份验证")
+    html = _PURPOSE_CODE_MAIL_TMPL.format(
+        code=str(code), ttl=ttl_minutes, purpose_label=purpose_label
+    )
+    _send_mail(cfg, to, "SQL 错题本%s验证码：%s" % (purpose_label, code), html)
 
 
 def send_test_email(to, cfg=None):

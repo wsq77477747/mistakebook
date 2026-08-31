@@ -40,17 +40,44 @@ class StorageTests(unittest.TestCase):
         self.assertIsNotNone(storage.authenticate("OWNER@example.com", "password123"))
         self.assertIsNone(storage.authenticate("owner@example.com", "wrong-password"))
 
-    def test_register_requires_valid_and_unused_email(self):
+    def test_register_requires_valid_email_and_limits_three_accounts(self):
         storage.register_user("owner", "password123", "owner@example.com")
         with self.assertRaises(ValueError):
             storage.register_user("no-email", "password123", "")
         with self.assertRaises(ValueError):
             storage.register_user("bad-email", "password123", "not-an-email")
-        with self.assertRaises(ValueError):
-            storage.register_user("dup-email", "password123", "OWNER@Example.com")
+        storage.register_user("second-owner", "password456", "OWNER@Example.com")
+        storage.register_user("third-owner", "password789", "owner@example.com")
+        with self.assertRaisesRegex(ValueError, "最多只能注册"):
+            storage.register_user("fourth-owner", "password000", "owner@example.com")
+        self.assertEqual(storage.email_account_count("OWNER@example.com"), 3)
         authenticated = storage.authenticate("owner@example.com", "password123")
         self.assertIsNotNone(authenticated)
         self.assertEqual(authenticated["email"], "owner@example.com")
+
+    def test_auth_ticket_password_reset_and_community(self):
+        first = storage.register_user("community-one", "password123", "shared@example.com")
+        second = storage.register_user("community-two", "password456", "shared@example.com")
+        self.assertEqual(len(storage.users_by_email("SHARED@example.com")), 2)
+        ticket = storage.create_auth_ticket("shared@example.com", "reset")
+        selected = storage.consume_auth_ticket(ticket, "reset", second["id"])
+        self.assertEqual(selected["username"], "community-two")
+        with self.assertRaises(ValueError):
+            storage.consume_auth_ticket(ticket, "reset", first["id"])
+        storage.update_password(second["id"], "new-password-456")
+        self.assertIsNotNone(storage.authenticate("community-two", "new-password-456"))
+        self.assertIsNone(storage.authenticate("community-two", "password456"))
+        post_id = storage.create_community_post(first["id"], "窗口函数如何复习？")
+        storage.add_community_comment(second["id"], post_id, "先掌握分区和排序。")
+        liked = storage.toggle_community_like(second["id"], post_id)
+        self.assertTrue(liked["liked"])
+        self.assertEqual(storage.share_community_post(second["id"], post_id)["share_count"], 1)
+        posts = storage.list_community_posts(second["id"])
+        self.assertEqual(posts[0]["comment_count"], 1)
+        self.assertTrue(posts[0]["liked"])
+        profile = storage.public_community_profile(first["id"], second["id"])
+        self.assertEqual(profile["post_count"], 1)
+        self.assertEqual(profile["received_likes"], 1)
 
     def test_existing_account_without_email_survives_schema_upgrade(self):
         legacy_db = os.path.join(self.tmp.name, "legacy.db")

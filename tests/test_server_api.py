@@ -200,8 +200,9 @@ class ServerApiTests(unittest.TestCase):
         mailer.register_code_required = lambda: True
         mailer.smtp_configured = lambda: True
 
-        def fake_send(to, code, ttl_minutes=10):
+        def fake_send(to, code, ttl_minutes=10, purpose="register"):
             sent.setdefault("codes", {})[to] = code
+            sent.setdefault("purposes", {})[to] = purpose
 
         mailer.send_verification_code = fake_send
         try:
@@ -215,13 +216,14 @@ class ServerApiTests(unittest.TestCase):
             status, err = self.request(
                 "/api/auth/send_code", {"email": "ghost@example.com", "purpose": "login"})
             self.assertEqual(status, 404)
-            # 已注册邮箱：注册用途发码被拒，登录用途发码成功
+            # 同一邮箱未满 3 个账号时，仍允许发送注册用途验证码
             status, err = self.request(
                 "/api/auth/send_code", {"email": "codelogin@example.com", "purpose": "register"})
-            self.assertEqual(status, 400)
+            self.assertEqual(status, 200)
             status, resp = self.request(
                 "/api/auth/send_code", {"email": "codelogin@example.com", "purpose": "login"})
             self.assertEqual(status, 200)
+            self.assertEqual(sent["purposes"]["codelogin@example.com"], "login")
             code = sent["codes"]["codelogin@example.com"]
             # 错误验证码 → 401；正确验证码 → 登录成功并建立会话
             status, err = self.request(
@@ -256,6 +258,79 @@ class ServerApiTests(unittest.TestCase):
         self.assertIn("Max-Age=%d" % (server.storage.SESSION_DAYS * 86400), cookie)
         status, headers = self.request_raw("/api/auth/login", dict(login), client=client)
         self.assertIn("Max-Age", headers.get("Set-Cookie", "") or "")  # 默认持久，兼容老客户端
+
+    def test_multi_account_code_login_reset_and_community(self):
+        import mailer
+        orig_send, orig_configured = mailer.send_verification_code, mailer.smtp_configured
+        sent = {}
+        mailer.smtp_configured = lambda: True
+
+        def fake_send(to, code, ttl_minutes=10, purpose="register"):
+            sent[(to.casefold(), purpose)] = code
+
+        mailer.send_verification_code = fake_send
+        try:
+            first = server.storage.register_user("shared-one", "password123", "shared-api@example.com")
+            second = server.storage.register_user("shared-two", "password456", "shared-api@example.com")
+            client = urllib.request.build_opener(
+                urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+            status, _ = self.request("/api/auth/send_code", {
+                "email": "shared-api@example.com", "purpose": "login"})
+            self.assertEqual(status, 200)
+            status, selection = self.request("/api/auth/login", {
+                "email": "shared-api@example.com",
+                "email_code": sent[("shared-api@example.com", "login")],
+            }, client=client)
+            self.assertEqual(status, 200)
+            self.assertTrue(selection["account_selection_required"])
+            self.assertEqual(len(selection["accounts"]), 2)
+            status, login = self.request("/api/auth/login", {
+                "selection_token": selection["selection_token"],
+                "account_id": second["id"],
+            }, client=client)
+            self.assertEqual(login["user"]["username"], "shared-two")
+
+            status, created = self.request("/api/community/posts", {
+                "content": "ROW_NUMBER 和 RANK 的区别是什么？"}, client=client)
+            self.assertEqual(status, 201)
+            post_id = created["post_id"]
+            status, liked = self.request("/api/community/like", {"post_id": post_id}, client=client)
+            self.assertTrue(liked["liked"])
+            status, commented = self.request("/api/community/comments", {
+                "post_id": post_id, "content": "并列排名的处理不同。"}, client=client)
+            self.assertEqual(status, 201)
+            status, shared = self.request("/api/community/share", {"post_id": post_id}, client=client)
+            self.assertEqual(shared["share_count"], 1)
+            anonymous = urllib.request.build_opener()
+            status, posts = self.request("/api/community/posts", client=anonymous)
+            self.assertEqual(status, 200)
+            self.assertTrue(any(p["id"] == post_id for p in posts["posts"]))
+            status, profile = self.request(
+                "/api/community/profile?id=" + urllib.parse.quote(second["id"]), client=anonymous)
+            self.assertEqual(profile["profile"]["post_count"], 1)
+
+            status, _ = self.request("/api/auth/send_code", {
+                "email": "shared-api@example.com", "purpose": "reset"})
+            self.assertEqual(status, 200)
+            status, reset = self.request("/api/auth/reset_password", {
+                "email": "shared-api@example.com",
+                "email_code": sent[("shared-api@example.com", "reset")],
+            })
+            self.assertTrue(reset["account_selection_required"])
+            status, invalid = self.request("/api/auth/reset_password", {
+                "selection_token": reset["selection_token"], "account_id": first["id"],
+                "new_password": "short",
+            })
+            self.assertEqual(status, 400)  # 不应消费一次性票据，修正密码后仍可继续
+            status, done = self.request("/api/auth/reset_password", {
+                "selection_token": reset["selection_token"], "account_id": first["id"],
+                "new_password": "new-password-123",
+            })
+            self.assertEqual(status, 200)
+            self.assertIsNotNone(server.storage.authenticate("shared-one", "new-password-123"))
+            self.assertIsNone(server.storage.authenticate("shared-one", "password123"))
+        finally:
+            mailer.send_verification_code, mailer.smtp_configured = orig_send, orig_configured
 
     def test_session_sliding_renewal(self):
         registered = server.storage.register_user("renew-user", "password123", "renew-user@example.com")
@@ -345,11 +420,13 @@ class ServerApiTests(unittest.TestCase):
     def test_email_code_flow_when_enabled(self):
         import mailer
         orig_required, orig_send = mailer.register_code_required, mailer.send_verification_code
+        orig_configured = mailer.smtp_configured
         sent = {}
         mailer.register_code_required = lambda: True
+        mailer.smtp_configured = lambda: True
 
-        def fake_send(to, code, ttl_minutes=10):
-            sent["to"], sent["code"] = to, code
+        def fake_send(to, code, ttl_minutes=10, purpose="register"):
+            sent["to"], sent["code"], sent["purpose"] = to, code, purpose
 
         mailer.send_verification_code = fake_send
         try:
@@ -363,6 +440,7 @@ class ServerApiTests(unittest.TestCase):
             status, resp = self.request("/api/auth/send_code", {"email": "coded@example.com"})
             self.assertEqual(status, 200)
             self.assertEqual(sent["to"], "coded@example.com")
+            self.assertEqual(sent["purpose"], "register")
             status, err = self.request(
                 "/api/auth/register", dict(register, email_code="000000"))
             self.assertEqual(status, 400)  # 验证码错误
@@ -370,10 +448,10 @@ class ServerApiTests(unittest.TestCase):
                 "/api/auth/register", dict(register, email_code=sent["code"]))
             self.assertEqual(status, 201)
             self.assertEqual(reg["user"]["email"], "coded@example.com")
-            status, err = self.request("/api/auth/send_code", {"email": "coded@example.com"})
-            self.assertEqual(status, 400)  # 已注册邮箱不再发码
+            self.assertEqual(cfg["max_accounts_per_email"], 3)
         finally:
             mailer.register_code_required, mailer.send_verification_code = orig_required, orig_send
+            mailer.smtp_configured = orig_configured
 
     def test_email_config_requires_admin(self):
         import mailer

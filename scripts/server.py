@@ -484,7 +484,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "will_import_local": storage.legacy_questions_available(),
                 "code_ttl_minutes": storage.EMAIL_CODE_TTL_MINUTES,
                 "resend_interval_seconds": storage.EMAIL_CODE_RESEND_SECONDS,
+                "max_accounts_per_email": storage.MAX_ACCOUNTS_PER_EMAIL,
             })
+        if path == "/api/community/posts":
+            args = parse_qs(urlparse(self.path).query)
+            viewer = storage.user_for_session(self._session_token())
+            posts = storage.list_community_posts(
+                viewer["id"] if viewer else "", args.get("limit", [30])[0]
+            )
+            return self._send_json(200, {"posts": posts})
+        if path == "/api/community/profile":
+            args = parse_qs(urlparse(self.path).query)
+            viewer = storage.user_for_session(self._session_token())
+            profile = storage.public_community_profile(
+                args.get("id", [""])[0], viewer["id"] if viewer else ""
+            )
+            if not profile:
+                return self._send_json(404, {"error": "USER_NOT_FOUND", "message": "用户不存在。"})
+            return self._send_json(200, {"profile": profile})
         if path.startswith("/api/") and not self._require_user():
             return
         if path == "/api/questions":
@@ -538,6 +555,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._send_code()
         if path == "/api/auth/login":
             return self._login()
+        if path == "/api/auth/reset_password":
+            return self._reset_password()
         if path == "/api/auth/logout":
             return self._logout()
         if path.startswith("/api/") and not self._require_user():
@@ -553,6 +572,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._save_my_ai_config()
         if path == "/api/profile":
             return self._save_profile()
+        if path == "/api/community/posts":
+            return self._community_create_post()
+        if path == "/api/community/comments":
+            return self._community_add_comment()
+        if path == "/api/community/like":
+            return self._community_toggle_like()
+        if path == "/api/community/share":
+            return self._community_share()
         if path == "/api/config" and not self.user.get("is_admin"):
             return self._send_json(403, {"error": "ADMIN_REQUIRED", "message": "只有站点管理员可以修改站点 AI 配置。"})
         if path in {"/api/email/config", "/api/email/test"} and not self.user.get("is_admin"):
@@ -582,10 +609,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self._send_json(404, {"error": "NOT_FOUND", "message": "未知接口"})
 
     # ---- 账号与复习 ----
+    @staticmethod
+    def _account_choices(users):
+        return [{
+            "id": user["id"],
+            "username": user["username"],
+            "display_name": user.get("display_name", ""),
+            "avatar": user.get("avatar", ""),
+        } for user in users]
+
     def _register(self):
         body = self._read_body()
         email = str(body.get("email") or "").strip()
         try:
+            if storage.email_account_count(email) >= storage.MAX_ACCOUNTS_PER_EMAIL:
+                return self._send_json(409, {
+                    "error": "EMAIL_ACCOUNT_LIMIT",
+                    "message": "该邮箱最多只能注册 %d 个账号。" % storage.MAX_ACCOUNTS_PER_EMAIL,
+                })
             if mailer.register_code_required():
                 code = str(body.get("email_code") or "").strip()
                 if not code:
@@ -607,25 +648,32 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._send_auth(201, response, token=token, remember=remember)
             self._track_event("register", metadata={"username": body.get("username", "")[:50], "imported": user.get("imported", 0)})
         except ValueError as exc:
-            self._send_json(400, {"error": "REGISTER_FAILED", "message": str(exc)})
+            error = "EMAIL_ACCOUNT_LIMIT" if "最多只能注册" in str(exc) else "REGISTER_FAILED"
+            self._send_json(409 if error == "EMAIL_ACCOUNT_LIMIT" else 400,
+                            {"error": error, "message": str(exc)})
 
     def _send_code(self):
         body = self._read_body()
-        purpose = "login" if body.get("purpose") == "login" else "register"
+        purpose = str(body.get("purpose") or "register").strip()
+        if purpose not in {"register", "login", "reset"}:
+            return self._send_json(400, {"error": "INVALID_PURPOSE", "message": "不支持的验证码用途。"})
         email = str(body.get("email") or "").strip()
         if not storage.EMAIL_RE.match(email) or len(email) > 254:
             return self._send_json(400, {"error": "INVALID_EMAIL",
-                                         "message": "邮箱格式不正确，请填写形如 name@example.com 的地址。"})
-        if not mailer.register_code_required():
+                                         "message": "邮箱格式不正确，请填写类似 name@example.com 的地址。"})
+        if not mailer.smtp_configured():
             return self._send_json(503, {"error": "EMAIL_NOT_CONFIGURED",
-                                         "message": "邮件服务尚未配置，暂时无法发送验证码。"})
+                                         "message": "邮件服务尚未启用或配置不完整，暂时无法发送验证码。"})
         email_norm = email.casefold()
-        registered = storage.email_registered(email_norm)
-        if purpose == "register" and registered:
-            return self._send_json(400, {"error": "EMAIL_TAKEN", "message": "该邮箱已被注册，请直接登录。"})
-        if purpose == "login" and not registered:
+        account_count = storage.email_account_count(email_norm)
+        if purpose == "register" and account_count >= storage.MAX_ACCOUNTS_PER_EMAIL:
+            return self._send_json(409, {
+                "error": "EMAIL_ACCOUNT_LIMIT",
+                "message": "该邮箱已绑定 %d 个账号，已达到上限，不能继续注册。" % account_count,
+            })
+        if purpose in {"login", "reset"} and not account_count:
             return self._send_json(404, {"error": "EMAIL_NOT_FOUND",
-                                         "message": "该邮箱尚未注册，请先创建账号。"})
+                                         "message": "该邮箱尚未绑定账号，请先注册。"})
         try:
             code, expires = storage.create_email_code(
                 email, purpose=purpose,
@@ -633,44 +681,147 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         except ValueError as exc:
             return self._send_json(429, {"error": "CODE_RATE_LIMITED", "message": str(exc)})
         try:
-            mailer.send_verification_code(email, code, storage.EMAIL_CODE_TTL_MINUTES)
+            mailer.send_verification_code(
+                email, code, storage.EMAIL_CODE_TTL_MINUTES, purpose=purpose
+            )
         except Exception as e:
             return self._send_json(502, {"error": "SEND_FAIL", "message": "验证码邮件发送失败：%s" % e})
         self._track_event("send_code", page="/api/auth/send_code",
                           metadata={"purpose": purpose, "domain": email_norm.split("@")[-1][:50]})
+        purpose_labels = {"register": "注册", "login": "登录", "reset": "找回密码"}
         return self._send_json(200, {"ok": True, "expires_at": expires,
                                      "ttl_minutes": storage.EMAIL_CODE_TTL_MINUTES,
-                                     "resend_interval_seconds": storage.EMAIL_CODE_RESEND_SECONDS})
+                                     "resend_interval_seconds": storage.EMAIL_CODE_RESEND_SECONDS,
+                                     "purpose": purpose, "account_count": account_count,
+                                     "remaining_account_slots": max(0, storage.MAX_ACCOUNTS_PER_EMAIL - account_count),
+                                     "message": "%s验证码已发送，请检查邮箱。" % purpose_labels[purpose]})
 
     def _login(self):
         body = self._read_body()
         remember = bool(body.get("remember_me", True))
         email = str(body.get("email") or "").strip()
         code = str(body.get("email_code") or "").strip()
-        if code:
-            # 邮箱验证码登录：无需密码
+        selection_token = str(body.get("selection_token") or "").strip()
+        if selection_token:
+            try:
+                user = storage.consume_auth_ticket(
+                    selection_token, "login", str(body.get("account_id") or "")
+                )
+            except ValueError as exc:
+                return self._send_json(401, {"error": "LOGIN_FAILED", "message": str(exc)})
+            method = "email_account_selection"
+        elif code:
             try:
                 storage.verify_email_code(email, code, purpose="login")
             except ValueError as exc:
                 return self._send_json(401, {"error": "LOGIN_FAILED", "message": str(exc)})
-            user = storage.user_by_email(email)
-            if not user:
-                return self._send_json(401, {"error": "LOGIN_FAILED", "message": "该邮箱尚未注册。"})
+            users = storage.users_by_email(email)
+            if not users:
+                return self._send_json(401, {"error": "LOGIN_FAILED", "message": "该邮箱尚未绑定账号。"})
+            if len(users) > 1:
+                return self._send_json(200, {
+                    "ok": True,
+                    "account_selection_required": True,
+                    "selection_token": storage.create_auth_ticket(email, "login"),
+                    "accounts": self._account_choices(users),
+                    "message": "验证码正确，请选择要登录的账号。",
+                })
+            user = users[0]
+            method = "email_code"
         else:
             user = storage.authenticate(body.get("username"), body.get("password"))
             if not user:
                 return self._send_json(401, {"error": "LOGIN_FAILED", "message": "账号或密码不正确。"})
+            method = "password"
         token = storage.create_session(user["id"], persistent=remember)
         response = {"ok": True, "user": user}
         if body.get("client_type") == "mini_program":
             response["session_token"] = token
         self._send_auth(200, response, token=token, remember=remember)
-        self._track_event("login", metadata={"username": user["username"][:50], "method": "email_code" if code else "password"})
+        self._track_event("login", metadata={"username": user["username"][:50], "method": method})
+
+    def _reset_password(self):
+        body = self._read_body()
+        selection_token = str(body.get("selection_token") or "").strip()
+        if selection_token:
+            if len(str(body.get("new_password") or "")) < 8:
+                return self._send_json(400, {
+                    "error": "RESET_FAILED", "message": "新密码至少需要 8 个字符。"
+                })
+            try:
+                user = storage.consume_auth_ticket(
+                    selection_token, "reset", str(body.get("account_id") or "")
+                )
+                storage.update_password(user["id"], body.get("new_password"))
+            except ValueError as exc:
+                return self._send_json(400, {"error": "RESET_FAILED", "message": str(exc)})
+            self._track_event("password_reset", metadata={"username": user["username"][:50]})
+            return self._send_json(200, {
+                "ok": True, "message": "密码已重置，请使用新密码登录。"
+            })
+        email = str(body.get("email") or "").strip()
+        code = str(body.get("email_code") or "").strip()
+        if not email or not code:
+            return self._send_json(400, {
+                "error": "RESET_CODE_REQUIRED", "message": "请填写注册邮箱和找回密码验证码。"
+            })
+        try:
+            storage.verify_email_code(email, code, purpose="reset")
+            users = storage.users_by_email(email)
+            if not users:
+                raise ValueError("该邮箱尚未绑定账号。")
+            ticket = storage.create_auth_ticket(email, "reset")
+        except ValueError as exc:
+            return self._send_json(400, {"error": "RESET_FAILED", "message": str(exc)})
+        return self._send_json(200, {
+            "ok": True, "account_selection_required": len(users) > 1,
+            "selection_token": ticket, "accounts": self._account_choices(users),
+            "message": "验证码正确，请选择需要重置密码的账号。" if len(users) > 1
+                       else "验证码正确，请设置新密码。",
+        })
 
     def _logout(self):
         self._track_event("logout")
         storage.delete_session(self._session_token())
         self._send_auth(200, {"ok": True}, clear=True)
+
+    def _community_create_post(self):
+        body = self._read_body()
+        try:
+            post_id = storage.create_community_post(self.user["id"], body.get("content"))
+            self._track_event("community_post", metadata={"post_id": post_id})
+            return self._send_json(201, {"ok": True, "post_id": post_id})
+        except ValueError as exc:
+            return self._send_json(400, {"error": "POST_FAILED", "message": str(exc)})
+
+    def _community_add_comment(self):
+        body = self._read_body()
+        try:
+            comment_id = storage.add_community_comment(
+                self.user["id"], body.get("post_id"), body.get("content")
+            )
+            self._track_event("community_comment", metadata={
+                "post_id": str(body.get("post_id") or "")[:36]
+            })
+            return self._send_json(201, {"ok": True, "comment_id": comment_id})
+        except ValueError as exc:
+            return self._send_json(400, {"error": "COMMENT_FAILED", "message": str(exc)})
+
+    def _community_toggle_like(self):
+        body = self._read_body()
+        try:
+            result = storage.toggle_community_like(self.user["id"], body.get("post_id"))
+            return self._send_json(200, {"ok": True, **result})
+        except ValueError as exc:
+            return self._send_json(400, {"error": "LIKE_FAILED", "message": str(exc)})
+
+    def _community_share(self):
+        body = self._read_body()
+        try:
+            result = storage.share_community_post(self.user["id"], body.get("post_id"))
+            return self._send_json(200, {"ok": True, **result})
+        except ValueError as exc:
+            return self._send_json(400, {"error": "SHARE_FAILED", "message": str(exc)})
 
     def _import_batch(self):
         body = self._read_body()
