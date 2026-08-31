@@ -77,11 +77,14 @@ def _read_config_raw():
 
 
 def load_config():
+    """站点级 AI 配置：优先 config/ai_config.json，缺失字段回退环境变量
+    （AI_BASE_URL / AI_API_KEY / AI_MODEL），便于服务器部署时通过
+    systemd Environment 或 secrets 注入私密配置，而无需把 Key 提交进仓库。"""
     cfg = _read_config_raw()
     return {
-        "base_url": str(cfg.get("base_url") or DEFAULT_BASE),
-        "api_key": str(cfg.get("api_key") or ""),
-        "model": str(cfg.get("model") or ""),
+        "base_url": str(cfg.get("base_url") or os.environ.get("AI_BASE_URL") or DEFAULT_BASE),
+        "api_key": str(cfg.get("api_key") or os.environ.get("AI_API_KEY") or ""),
+        "model": str(cfg.get("model") or os.environ.get("AI_MODEL") or ""),
     }
 
 

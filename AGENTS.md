@@ -21,8 +21,9 @@ PowerShell 对中文引号、反斜杠、三引号 `'''`、`\"` 的转义会反�
 - 停止服务：`停止服务.bat` 或杀掉 8765 端口进程。
 
 ## 关键配置
-- AI 配置：`config/ai_config.json`（base_url / api_key / model / presets）。
-- 当前默认：阿里云百炼 `qwen-vl-plus`（视觉+文本全能，已验证可用）。
+- AI 配置：`config/ai_config.json`（base_url / api_key / model / presets），**禁止提交 Git**（email_config.json 同理）。
+- 当前默认：阿里云百炼 `qwen-vl-max`（视觉+文本全能，已验证可用）。
+- 配置文件缺失的字段依次回退环境变量 `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL`（服务器部署用，见 `deploy/apply_private_config.py` 与 `docs/GITHUB_ACTIONS_DEPLOY.md` 第九节）。
 - 保存配置前必须通过 `/api/test` 连通性测试（前端已内置门禁）。
 
 ## 账号、数据库与同步

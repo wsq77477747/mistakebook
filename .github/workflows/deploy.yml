@@ -39,7 +39,14 @@ jobs:
 
       - name: Check deployment scripts
         run: |
-          python3 -m py_compile deploy/pull_update.py
+          python3 -m py_compile deploy/pull_update.py deploy/apply_private_config.py
           bash -n deploy/update_native.sh
           bash -n deploy/install_pull_timer.sh
           bash -n deploy/install_native.sh
+
+      - name: Guard private config out of the repository
+        run: |
+          if git ls-files --error-unmatch config/ai_config.json config/email_config.json >/dev/null 2>&1; then
+            echo "::error::私密配置文件被提交进仓库，请立即从历史中移除并轮换密钥" && exit 1
+          fi
+          echo "OK: ai_config.json / email_config.json 未入库"

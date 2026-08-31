@@ -151,3 +151,38 @@ GitHub 测试成功后，服务器通常会在 5 分钟内自动部署。Pull Re
 - 更新或健康检查失败：`deploy/update_native.sh` 自动恢复更新前的 `scripts/`、`assets/` 和 `deploy/`。
 
 主动拉取确认正常后，可以删除腾讯云中为排查创建的 TCP 22、2222 和 22022 公网规则；网站继续保留 80，配置 HTTPS 后保留 443。
+
+## 九、私密配置（AI Key / 邮件授权码）
+
+`config/ai_config.json` 与 `config/email_config.json` 含密钥，被 `.gitignore` 排除、永远不会进仓库——因此 GitHub 拉取的部署包里没有它们，服务器上若从未配置过，AI 接口会返回 `NOT_CONFIGURED`。两种解决方式：
+
+### 方式一：网页配置（推荐）
+
+管理员账号登录站点 → 右上角 ⚙️ 设置 → 填写 Base URL / API Key / 模型并保存（保存前会自动测试连通性）。配置写入服务器持久目录 `/opt/sql-wrongbook/config/`，不随版本更新覆盖。
+
+### 方式二：服务器上运行注入脚本
+
+```bash
+sudo AI_API_KEY=sk-xxx \
+     AI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1 \
+     AI_MODEL=qwen-vl-max \
+     python3 /opt/sql-wrongbook/app/deploy/apply_private_config.py
+```
+
+可选邮件配置（注册验证码用）：
+
+```bash
+sudo EMAIL_ENABLED=1 EMAIL_HOST=smtp.qq.com EMAIL_PORT=465 \
+     EMAIL_USERNAME=you@qq.com EMAIL_PASSWORD=SMTP授权码 EMAIL_SENDER=you@qq.com \
+     python3 /opt/sql-wrongbook/app/deploy/apply_private_config.py
+```
+
+脚本行为：只写环境变量里提供的字段，配置文件中其余字段原样保留（幂等，可重复运行）；文件权限 0600；输出中密钥只显示末 4 位。写入后立即生效，无需重启服务。
+
+### 环境变量直读兜底
+
+`scripts/server.py` 的站点级 AI 配置支持环境变量兜底：配置文件缺失的字段依次回退 `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL`。也可以把这三个变量写进 systemd 单元（`/etc/systemd/system/sql-wrongbook.service` 的 `Environment=` 行，改完 `systemctl daemon-reload && systemctl restart sql-wrongbook`），完全不落盘。
+
+### CI 防护
+
+工作流包含一步「Guard private config out of the repository」：一旦 `config/ai_config.json` 或 `config/email_config.json` 被误提交进仓库，CI 直接失败、服务器不会部署该提交。若历史上已误提交，须从历史中移除并轮换密钥。
