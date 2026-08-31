@@ -20,7 +20,9 @@ DATA_DIR = os.path.join(ROOT, "data")
 DB_PATH = os.environ.get("SQL_WRONGBOOK_DB", os.path.join(DATA_DIR, "sql_review.db"))
 QUIZ_DIR = os.path.join(ROOT, "错题库")
 SESSION_DAYS = 30
+SESSION_RENEW_THRESHOLD_DAYS = SESSION_DAYS // 2  # 剩余不足一半时滑动续期
 PBKDF2_ITERATIONS = 240_000
+EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$")
 
 
 def _now():
@@ -63,6 +65,8 @@ def init_db():
               id TEXT PRIMARY KEY,
               username TEXT NOT NULL,
               username_norm TEXT NOT NULL UNIQUE,
+              email TEXT NOT NULL DEFAULT '',
+              email_norm TEXT NOT NULL DEFAULT '',
               password_salt TEXT NOT NULL,
               password_hash TEXT NOT NULL,
               is_admin INTEGER NOT NULL DEFAULT 0,
@@ -74,7 +78,8 @@ def init_db():
               token_hash TEXT PRIMARY KEY,
               user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
               expires_at TEXT NOT NULL,
-              created_at TEXT NOT NULL
+              created_at TEXT NOT NULL,
+              persistent INTEGER NOT NULL DEFAULT 1
             );
 
             CREATE TABLE IF NOT EXISTS questions (
@@ -141,6 +146,18 @@ def init_db():
               created_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS email_codes (
+              id TEXT PRIMARY KEY,
+              email_norm TEXT NOT NULL,
+              code_hash TEXT NOT NULL,
+              purpose TEXT NOT NULL DEFAULT 'register',
+              attempts INTEGER NOT NULL DEFAULT 0,
+              used_at TEXT,
+              ip TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL,
+              expires_at TEXT NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_sessions_user_expiry
               ON sessions(user_id, expires_at);
             CREATE INDEX IF NOT EXISTS idx_questions_user_due
@@ -157,14 +174,28 @@ def init_db():
               ON user_events(event_type, created_at);
             CREATE INDEX IF NOT EXISTS idx_events_device_created
               ON user_events(device_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_email_codes_email
+              ON email_codes(email_norm, purpose, created_at DESC);
             """
         )
         user_columns = {row[1] for row in db.execute("PRAGMA table_info(users)")}
+        session_columns = {row[1] for row in db.execute("PRAGMA table_info(sessions)")}
+        if "persistent" not in session_columns:
+            # 旧库默认视为持久会话，保持升级前的自动登录行为
+            db.execute("ALTER TABLE sessions ADD COLUMN persistent INTEGER NOT NULL DEFAULT 1")
         if "is_admin" not in user_columns:
             db.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
             db.execute(
                 "UPDATE users SET is_admin=1 WHERE id=(SELECT id FROM users ORDER BY created_at,id LIMIT 1)"
             )
+        if "email" not in user_columns:
+            db.execute("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''")
+        if "email_norm" not in user_columns:
+            db.execute("ALTER TABLE users ADD COLUMN email_norm TEXT NOT NULL DEFAULT ''")
+        db.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_norm "
+            "ON users(email_norm) WHERE email_norm != ''"
+        )
         db.execute("DELETE FROM sessions WHERE expires_at <= ?", (_now(),))
         db.execute("PRAGMA optimize")
 
@@ -175,54 +206,99 @@ def _password_digest(password, salt_hex):
     ).hex()
 
 
-def register_user(username, password):
+def register_user(username, password, email):
     username = str(username or "").strip()
     username_norm = username.casefold()
+    email = str(email or "").strip()
+    email_norm = email.casefold()
     if len(username) < 3 or len(username) > 80:
         raise ValueError("账号长度需为 3–80 个字符。")
     if len(str(password or "")) < 8:
         raise ValueError("密码至少需要 8 个字符。")
+    if not email:
+        raise ValueError("请填写邮箱。")
+    if len(email) > 254 or not EMAIL_RE.match(email):
+        raise ValueError("邮箱格式不正确，请填写形如 name@example.com 的地址。")
     salt = secrets.token_hex(16)
     now = _now()
     user_id = str(uuid.uuid4())
     with connect() as db:
         db.execute("BEGIN IMMEDIATE")
         first_user = db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+        if db.execute("SELECT 1 FROM users WHERE email_norm=?", (email_norm,)).fetchone():
+            raise ValueError("该邮箱已被注册。")
         try:
             db.execute(
-                "INSERT INTO users(id,username,username_norm,password_salt,password_hash,is_admin,created_at,updated_at) "
-                "VALUES(?,?,?,?,?,?,?,?)",
-                (user_id, username, username_norm, salt, _password_digest(password, salt), 1 if first_user else 0, now, now),
+                "INSERT INTO users(id,username,username_norm,email,email_norm,password_salt,password_hash,is_admin,created_at,updated_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (user_id, username, username_norm, email, email_norm, salt,
+                 _password_digest(password, salt), 1 if first_user else 0, now, now),
             )
         except sqlite3.IntegrityError as exc:
             raise ValueError("该账号已存在。") from exc
     imported = import_legacy_questions(user_id) if first_user else 0
-    return {"id": user_id, "username": username, "is_admin": first_user, "imported": imported}
+    return {"id": user_id, "username": username, "email": email,
+            "is_admin": first_user, "imported": imported}
+
+
+def email_registered(email_norm):
+    with connect() as db:
+        row = db.execute("SELECT 1 FROM users WHERE email_norm=?", (str(email_norm or ""),)).fetchone()
+    return bool(row)
 
 
 def authenticate(username, password):
-    username_norm = str(username or "").strip().casefold()
+    identifier = str(username or "").strip().casefold()
     with connect() as db:
-        row = db.execute("SELECT * FROM users WHERE username_norm = ?", (username_norm,)).fetchone()
+        row = db.execute(
+            "SELECT * FROM users WHERE username_norm=? OR (email_norm!='' AND email_norm=?)",
+            (identifier, identifier),
+        ).fetchone()
     if not row:
         return None
     actual = _password_digest(str(password or ""), row["password_salt"])
     if not hmac.compare_digest(actual, row["password_hash"]):
         return None
-    return {"id": row["id"], "username": row["username"], "is_admin": bool(row["is_admin"])}
+    return {"id": row["id"], "username": row["username"], "email": row["email"],
+            "is_admin": bool(row["is_admin"])}
 
 
-def create_session(user_id):
+def create_session(user_id, persistent=True):
     token = secrets.token_urlsafe(32)
     token_hash = hashlib.sha256(token.encode("ascii")).hexdigest()
     now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
     expires = now + dt.timedelta(days=SESSION_DAYS)
     with connect() as db:
         db.execute(
-            "INSERT INTO sessions(token_hash,user_id,expires_at,created_at) VALUES(?,?,?,?)",
-            (token_hash, user_id, expires.isoformat().replace("+00:00", "Z"), now.isoformat().replace("+00:00", "Z")),
+            "INSERT INTO sessions(token_hash,user_id,expires_at,created_at,persistent) VALUES(?,?,?,?,?)",
+            (token_hash, user_id, expires.isoformat().replace("+00:00", "Z"),
+             now.isoformat().replace("+00:00", "Z"), 1 if persistent else 0),
         )
     return token
+
+
+def refresh_session(token):
+    """滑动续期：持久会话剩余有效期不足一半时延长至完整期限。
+
+    返回 True 表示已续期（服务端应同步刷新客户端 Cookie）；
+    非持久会话（未勾选自动登录）不续期，随浏览器关闭自然失效。
+    """
+    if not token:
+        return False
+    token_hash = hashlib.sha256(str(token).encode("ascii", "ignore")).hexdigest()
+    now_dt = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+    threshold = (now_dt + dt.timedelta(days=SESSION_RENEW_THRESHOLD_DAYS)).isoformat().replace("+00:00", "Z")
+    with connect() as db:
+        row = db.execute(
+            "SELECT expires_at, persistent FROM sessions WHERE token_hash=?", (token_hash,)
+        ).fetchone()
+        if not row or not row["persistent"] or row["expires_at"] > threshold:
+            return False
+        db.execute(
+            "UPDATE sessions SET expires_at=? WHERE token_hash=?",
+            ((now_dt + dt.timedelta(days=SESSION_DAYS)).isoformat().replace("+00:00", "Z"), token_hash),
+        )
+    return True
 
 
 def user_for_session(token):
@@ -231,11 +307,12 @@ def user_for_session(token):
     token_hash = hashlib.sha256(str(token).encode("ascii", "ignore")).hexdigest()
     with connect() as db:
         row = db.execute(
-            "SELECT u.id,u.username,u.is_admin FROM sessions s JOIN users u ON u.id=s.user_id "
+            "SELECT u.id,u.username,u.email,u.is_admin FROM sessions s JOIN users u ON u.id=s.user_id "
             "WHERE s.token_hash=? AND s.expires_at>?",
             (token_hash, _now()),
         ).fetchone()
-    return ({"id": row["id"], "username": row["username"], "is_admin": bool(row["is_admin"]) } if row else None)
+    return ({"id": row["id"], "username": row["username"], "email": row["email"],
+             "is_admin": bool(row["is_admin"])} if row else None)
 
 
 def delete_session(token):
@@ -246,9 +323,82 @@ def delete_session(token):
         db.execute("DELETE FROM sessions WHERE token_hash=?", (token_hash,))
 
 
-def _parse_frontmatter(path):
-    with open(path, encoding="utf-8") as f:
-        content = f.read()
+# ==================== 注册邮箱验证码 ====================
+
+EMAIL_CODE_TTL_MINUTES = 10
+EMAIL_CODE_RESEND_SECONDS = 60
+EMAIL_CODE_MAX_PER_HOUR = 5
+EMAIL_CODE_MAX_ATTEMPTS = 5
+
+
+def _code_digest(code, email_norm):
+    return hashlib.sha256(
+        ("sqlwb-code:%s:%s" % (email_norm, str(code))).encode("utf-8")
+    ).hexdigest()
+
+
+def create_email_code(email, purpose="register", ip=""):
+    """生成并发号：返回 (code, expires_at)。违反重发间隔/每小时上限时抛 ValueError。"""
+    email_norm = str(email or "").strip().casefold()
+    if not email_norm:
+        raise ValueError("请先填写邮箱。")
+    code = "%06d" % secrets.randbelow(1_000_000)
+    now_dt = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+    now = now_dt.isoformat().replace("+00:00", "Z")
+    expires = (now_dt + dt.timedelta(minutes=EMAIL_CODE_TTL_MINUTES)).isoformat().replace("+00:00", "Z")
+    with connect() as db:
+        db.execute(
+            "DELETE FROM email_codes WHERE expires_at<=? OR used_at IS NOT NULL AND created_at<=?",
+            (now, (now_dt - dt.timedelta(days=1)).isoformat().replace("+00:00", "Z")),
+        )
+        recent = db.execute(
+            "SELECT created_at FROM email_codes WHERE email_norm=? AND purpose=? AND used_at IS NULL "
+            "ORDER BY created_at DESC LIMIT 1",
+            (email_norm, purpose),
+        ).fetchone()
+        if recent and recent["created_at"] > (
+            now_dt - dt.timedelta(seconds=EMAIL_CODE_RESEND_SECONDS)).isoformat().replace("+00:00", "Z"):
+            raise ValueError("验证码发送太频繁，请 %d 秒后再试。" % EMAIL_CODE_RESEND_SECONDS)
+        hourly = db.execute(
+            "SELECT COUNT(*) FROM email_codes WHERE email_norm=? AND purpose=? AND created_at>?",
+            (email_norm, purpose,
+             (now_dt - dt.timedelta(hours=1)).isoformat().replace("+00:00", "Z")),
+        ).fetchone()[0]
+        if hourly >= EMAIL_CODE_MAX_PER_HOUR:
+            raise ValueError("该邮箱验证码发送次数已达上限，请 1 小时后再试。")
+        db.execute(
+            "INSERT INTO email_codes(id,email_norm,code_hash,purpose,attempts,ip,created_at,expires_at) "
+            "VALUES(?,?,?,?,0,?,?,?)",
+            (str(uuid.uuid4()), email_norm, _code_digest(code, email_norm), purpose,
+             str(ip or "")[:45], now, expires),
+        )
+    return code, expires
+
+
+def verify_email_code(email, code, purpose="register"):
+    """校验验证码：成功标记已用；失败/过期/超次抛 ValueError。"""
+    email_norm = str(email or "").strip().casefold()
+    code = str(code or "").strip()
+    now = _now()
+    with connect() as db:
+        row = db.execute(
+            "SELECT * FROM email_codes WHERE email_norm=? AND purpose=? AND used_at IS NULL "
+            "ORDER BY created_at DESC LIMIT 1",
+            (email_norm, purpose),
+        ).fetchone()
+        if not row or row["expires_at"] <= now:
+            raise ValueError("验证码无效或已过期，请重新获取。")
+        if row["attempts"] >= EMAIL_CODE_MAX_ATTEMPTS:
+            raise ValueError("验证码错误次数过多，请重新获取。")
+        if not hmac.compare_digest(row["code_hash"], _code_digest(code, email_norm)):
+            db.execute("UPDATE email_codes SET attempts=attempts+1 WHERE id=?", (row["id"],))
+            raise ValueError("验证码不正确，请核对后重新输入。")
+        db.execute("UPDATE email_codes SET used_at=? WHERE id=?", (now, row["id"]))
+    return True
+
+
+def _parse_frontmatter_text(content):
+    """解析 Markdown 文本中的 frontmatter，返回 (meta, body)。"""
     meta, body = {}, content
     match = re.match(r"^---\s*\r?\n(.*?)\r?\n---\s*\r?\n", content, re.S)
     if match:
@@ -258,6 +408,11 @@ def _parse_frontmatter(path):
             if item:
                 meta[item.group(1).strip()] = item.group(2).strip()
     return meta, body.strip()
+
+
+def _parse_frontmatter(path):
+    with open(path, encoding="utf-8") as f:
+        return _parse_frontmatter_text(f.read())
 
 
 def _parse_dates(value):
@@ -617,6 +772,51 @@ def sync_push(user_id, records):
     return {"applied": applied, "conflicts": conflicts}
 
 
+def _meta_to_data(meta, body):
+    """frontmatter 元数据 + 正文 → create_question 所需的 data 字典。"""
+    return {
+        "no": meta.get("题号"), "title": meta.get("标题"), "cat": meta.get("知识点"),
+        "diff": meta.get("难度"), "date": meta.get("日期"), "src": meta.get("来源"),
+        "errtype": meta.get("错误类型"), "status": meta.get("状态"),
+        "times": meta.get("做错次数"), "redates": meta.get("重错日期"),
+        "summary": meta.get("一句话总结"), "body_md": body,
+    }
+
+
+def import_markdown_content(user_id, name, content):
+    """导入一段 Markdown 错题文本（含或不含 frontmatter）。
+
+    以「用户 + 文件名 + 内容哈希」生成固定 ID：重复导入相同文件自动跳过；
+    返回 (question_id, created)，created=False 表示该内容此前已导入过。
+    正文为空时抛 ValueError。
+    """
+    meta, body = _parse_frontmatter_text(content)
+    if not body.strip():
+        raise ValueError("正文为空，无法导入。")
+    question_id = str(uuid.uuid5(
+        uuid.NAMESPACE_URL, "sql-wrongbook-import:%s:%s:%s" % (
+            user_id, name, hashlib.sha256(content.encode("utf-8")).hexdigest()[:16])))
+    try:
+        create_question(user_id, _meta_to_data(meta, body), question_id=question_id)
+    except sqlite3.IntegrityError:
+        return question_id, False
+    return question_id, True
+
+
+def legacy_questions_available():
+    """是否满足「首个账号自动导入本地错题库」的条件：尚无任何账号，且 错题库/ 下有可导入的 Markdown。"""
+    with connect() as db:
+        if db.execute("SELECT COUNT(*) FROM users").fetchone()[0]:
+            return False
+    if not os.path.isdir(QUIZ_DIR):
+        return False
+    for _dirpath, _dirs, names in os.walk(QUIZ_DIR):
+        for name in names:
+            if name.lower().endswith(".md") and not name.startswith("_"):
+                return True
+    return False
+
+
 def import_legacy_questions(user_id):
     if not os.path.isdir(QUIZ_DIR):
         return 0
@@ -628,15 +828,8 @@ def import_legacy_questions(user_id):
             path = os.path.join(dirpath, name)
             rel = os.path.relpath(path, ROOT)
             meta, body = _parse_frontmatter(path)
-            data = {
-                "no": meta.get("题号"), "title": meta.get("标题"), "cat": meta.get("知识点"),
-                "diff": meta.get("难度"), "date": meta.get("日期"), "src": meta.get("来源"),
-                "errtype": meta.get("错误类型"), "status": meta.get("状态"),
-                "times": meta.get("做错次数"), "redates": meta.get("重错日期"),
-                "summary": meta.get("一句话总结"), "body_md": body,
-            }
             try:
-                create_question(user_id, data, source_file=rel,
+                create_question(user_id, _meta_to_data(meta, body), source_file=rel,
                                 question_id=str(uuid.uuid5(uuid.NAMESPACE_URL, "sql-wrongbook:" + rel)))
                 imported += 1
             except sqlite3.IntegrityError:

@@ -1,0 +1,11 @@
+{
+  "enabled": true,
+  "host": "smtp.qq.com",
+  "port": 465,
+  "use_ssl": true,
+  "use_starttls": false,
+  "username": "you@qq.com",
+  "password": "在邮箱设置里生成的 SMTP 授权码，不是邮箱登录密码",
+  "sender": "you@qq.com",
+  "sender_name": "SQL 错题本"
+}

@@ -28,6 +28,7 @@ from http import cookies
 from urllib.parse import parse_qs, unquote, urlparse
 
 import rebuild_index as indexer
+import mailer
 import storage
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -322,10 +323,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.user = user
         return user
 
-    def _set_session_cookie(self, token):
+    def _set_session_cookie(self, token, remember=True):
         secure = self.headers.get("X-Forwarded-Proto", "").lower() == "https"
-        value = "sqlwb_session=%s; Path=/; HttpOnly; SameSite=Lax; Max-Age=%d" % (
-            token, storage.SESSION_DAYS * 86400)
+        if remember:
+            # 持久 Cookie：30 天内再次访问自动登录
+            value = "sqlwb_session=%s; Path=/; HttpOnly; SameSite=Lax; Max-Age=%d" % (
+                token, storage.SESSION_DAYS * 86400)
+        else:
+            # 会话 Cookie：不带 Max-Age，关闭浏览器即退出
+            value = "sqlwb_session=%s; Path=/; HttpOnly; SameSite=Lax" % token
         if secure:
             value += "; Secure"
         self.send_header("Set-Cookie", value)
@@ -333,14 +339,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def _clear_session_cookie(self):
         self.send_header("Set-Cookie", "sqlwb_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")
 
-    def _send_auth(self, code, obj, token=None, clear=False):
+    def _send_auth(self, code, obj, token=None, clear=False, remember=True):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         if token:
-            self._set_session_cookie(token)
+            self._set_session_cookie(token, remember=remember)
         if clear:
             self._clear_session_cookie()
         self.end_headers()
@@ -393,8 +399,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path == "/":
             self._track_event("page_view", page="/")
         if path == "/api/auth/me":
-            user = self._current_user()
+            token = self._session_token()
+            user = storage.user_for_session(token)
+            if user and storage.refresh_session(token):
+                # 活跃用户的持久会话已自动续期，同步刷新 Cookie
+                return self._send_auth(200, {"authenticated": True, "user": user}, token=token)
             return self._send_json(200, {"authenticated": bool(user), "user": user})
+        if path == "/api/auth/register_config":
+            return self._send_json(200, {
+                "email_code_required": mailer.register_code_required(),
+                "will_import_local": storage.legacy_questions_available(),
+                "code_ttl_minutes": storage.EMAIL_CODE_TTL_MINUTES,
+                "resend_interval_seconds": storage.EMAIL_CODE_RESEND_SECONDS,
+            })
         if path.startswith("/api/") and not self._require_user():
             return
         if path == "/api/questions":
@@ -411,6 +428,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._send_json(200, storage.sync_pull(self.user["id"], args.get("since", [0])[0], args.get("limit", [500])[0]))
         if path == "/api/config":
             return self._get_config()
+        if path == "/api/email/config":
+            if not self.user.get("is_admin"):
+                return self._send_json(403, {"error": "ADMIN_REQUIRED", "message": "只有站点管理员可以查看邮件配置。"})
+            return self._send_json(200, self._email_config_view())
         if path == "/api/get_quiz":
             return self._get_quiz()
         if path == "/api/analytics/summary":
@@ -434,6 +455,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._send_json(403, {"error": "ORIGIN_REJECTED", "message": "拒绝跨站写入请求。"})
         if path == "/api/auth/register":
             return self._register()
+        if path == "/api/auth/send_code":
+            return self._send_code()
         if path == "/api/auth/login":
             return self._login()
         if path == "/api/auth/logout":
@@ -445,10 +468,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path == "/api/sync/push":
             body = self._read_body()
             return self._send_json(200, storage.sync_push(self.user["id"], body.get("records") or []))
+        if path == "/api/import_batch":
+            return self._import_batch()
         if path in {"/api/config", "/api/test"} and not self.user.get("is_admin"):
             return self._send_json(403, {"error": "ADMIN_REQUIRED", "message": "只有站点管理员可以修改 AI 配置。"})
+        if path in {"/api/email/config", "/api/email/test"} and not self.user.get("is_admin"):
+            return self._send_json(403, {"error": "ADMIN_REQUIRED", "message": "只有站点管理员可以修改邮件配置。"})
         if path == "/api/config":
             return self._save_config()
+        if path == "/api/email/config":
+            return self._save_email_config()
+        if path == "/api/email/test":
+            return self._test_email_config()
         if path == "/api/chat":
             return self._chat()
         if path == "/api/classify":
@@ -470,34 +501,103 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     # ---- 账号与复习 ----
     def _register(self):
         body = self._read_body()
+        email = str(body.get("email") or "").strip()
         try:
-            user = storage.register_user(body.get("username"), body.get("password"))
-            token = storage.create_session(user["id"])
-            response = {"ok": True, "user": {"id": user["id"], "username": user["username"], "is_admin": user["is_admin"]},
+            if mailer.register_code_required():
+                code = str(body.get("email_code") or "").strip()
+                if not code:
+                    return self._send_json(400, {"error": "EMAIL_CODE_REQUIRED",
+                                                 "message": "请先获取邮箱验证码并填写后再注册。"})
+                storage.verify_email_code(email, code, purpose="register")
+            user = storage.register_user(body.get("username"), body.get("password"), email)
+            remember = bool(body.get("remember_me", True))
+            token = storage.create_session(user["id"], persistent=remember)
+            response = {"ok": True,
+                        "user": {"id": user["id"], "username": user["username"], "email": user["email"],
+                                 "is_admin": user["is_admin"]},
                         "imported": user["imported"]}
             if body.get("client_type") == "mini_program":
                 response["session_token"] = token
-            self._send_auth(201, response, token=token)
+            self._send_auth(201, response, token=token, remember=remember)
             self._track_event("register", metadata={"username": body.get("username", "")[:50], "imported": user.get("imported", 0)})
         except ValueError as exc:
             self._send_json(400, {"error": "REGISTER_FAILED", "message": str(exc)})
+
+    def _send_code(self):
+        body = self._read_body()
+        email = str(body.get("email") or "").strip()
+        if not storage.EMAIL_RE.match(email) or len(email) > 254:
+            return self._send_json(400, {"error": "INVALID_EMAIL",
+                                         "message": "邮箱格式不正确，请填写形如 name@example.com 的地址。"})
+        if not mailer.register_code_required():
+            return self._send_json(503, {"error": "EMAIL_NOT_CONFIGURED",
+                                         "message": "邮件服务尚未配置，暂时无需验证码即可注册。"})
+        email_norm = email.casefold()
+        if storage.email_registered(email_norm):
+            return self._send_json(400, {"error": "EMAIL_TAKEN", "message": "该邮箱已被注册，请直接登录。"})
+        try:
+            code, expires = storage.create_email_code(
+                email, purpose="register",
+                ip=self.headers.get("X-Forwarded-For", self.client_address[0] if self.client_address else ""))
+        except ValueError as exc:
+            return self._send_json(429, {"error": "CODE_RATE_LIMITED", "message": str(exc)})
+        try:
+            mailer.send_verification_code(email, code, storage.EMAIL_CODE_TTL_MINUTES)
+        except Exception as e:
+            return self._send_json(502, {"error": "SEND_FAIL", "message": "验证码邮件发送失败：%s" % e})
+        self._track_event("send_code", page="/api/auth/send_code", metadata={"domain": email_norm.split("@")[-1][:50]})
+        return self._send_json(200, {"ok": True, "expires_at": expires,
+                                     "ttl_minutes": storage.EMAIL_CODE_TTL_MINUTES,
+                                     "resend_interval_seconds": storage.EMAIL_CODE_RESEND_SECONDS})
 
     def _login(self):
         body = self._read_body()
         user = storage.authenticate(body.get("username"), body.get("password"))
         if not user:
             return self._send_json(401, {"error": "LOGIN_FAILED", "message": "账号或密码不正确。"})
-        token = storage.create_session(user["id"])
+        remember = bool(body.get("remember_me", True))
+        token = storage.create_session(user["id"], persistent=remember)
         response = {"ok": True, "user": user}
         if body.get("client_type") == "mini_program":
             response["session_token"] = token
-        self._send_auth(200, response, token=token)
+        self._send_auth(200, response, token=token, remember=remember)
         self._track_event("login", metadata={"username": body.get("username", "")[:50]})
 
     def _logout(self):
         self._track_event("logout")
         storage.delete_session(self._session_token())
         self._send_auth(200, {"ok": True}, clear=True)
+
+    def _import_batch(self):
+        body = self._read_body()
+        files = body.get("files")
+        if not isinstance(files, list) or not files:
+            return self._send_json(400, {"error": "NO_FILES", "message": "请先选择要导入的 Markdown 文件。"})
+        if len(files) > 200:
+            return self._send_json(400, {"error": "TOO_MANY_FILES", "message": "单次最多导入 200 个文件。"})
+        imported_ids, skipped, failed = [], [], []
+        for item in files:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or "未命名.md")[:120]
+            content = str(item.get("content") or "")
+            if len(content) > 1_000_000:
+                failed.append({"name": name, "error": "文件过大（超过 1MB）"})
+                continue
+            try:
+                question_id, created = storage.import_markdown_content(self.user["id"], name, content)
+                if created:
+                    imported_ids.append(question_id)
+                else:
+                    skipped.append({"name": name, "reason": "相同内容已导入过，自动跳过"})
+            except ValueError as exc:
+                failed.append({"name": name, "error": str(exc)})
+            except Exception as exc:
+                failed.append({"name": name, "error": str(exc)[:120]})
+        if imported_ids:
+            self._track_event("import_batch", metadata={"count": len(imported_ids)})
+        return self._send_json(200, {"ok": True, "imported": len(imported_ids), "ids": imported_ids,
+                                     "skipped": skipped, "failed": failed})
 
     def _record_review(self):
         body = self._read_body()
@@ -586,6 +686,98 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         raw.update(cfg)
         save_config(raw)
         self._send_json(200, {"ok": True, "configured": bool(cfg["api_key"])})
+
+    # ---- 注册邮箱验证码（SMTP 配置仅管理员） ----
+    @staticmethod
+    def _email_config_view():
+        try:
+            with open(mailer.CONFIG_FILE, encoding="utf-8") as f:
+                raw = json.load(f)
+        except Exception:
+            raw = {}
+        password = str(raw.get("password") or "")
+        host = str(raw.get("host") or "")
+        username = str(raw.get("username") or "")
+        sender = str(raw.get("sender") or "") or username
+        return {
+            "enabled": bool(raw.get("enabled")),
+            "host": host,
+            "port": raw.get("port") or 465,
+            "use_ssl": bool(raw.get("use_ssl", True)),
+            "use_starttls": bool(raw.get("use_starttls", False)),
+            "username": username,
+            "password_tail": password[-2:] if password else "",
+            "sender": sender,
+            "sender_name": str(raw.get("sender_name") or mailer.SENDER_NAME_FALLBACK),
+            "configured": bool(host and username and password and sender),
+            "register_code_required": mailer.register_code_required(),
+        }
+
+    def _save_email_config(self):
+        body = self._read_body()
+        try:
+            with open(mailer.CONFIG_FILE, encoding="utf-8") as f:
+                raw = json.load(f)
+        except Exception:
+            raw = {}
+        try:
+            port = int(body.get("port") or 465)
+        except (TypeError, ValueError):
+            port = 465
+        raw.update({
+            "enabled": bool(body.get("enabled")),
+            "host": (body.get("host") or "").strip(),
+            "port": port,
+            "use_ssl": bool(body.get("use_ssl", True)),
+            "use_starttls": bool(body.get("use_starttls", False)),
+            "username": (body.get("username") or "").strip(),
+            "sender": (body.get("sender") or "").strip(),
+            "sender_name": (body.get("sender_name") or mailer.SENDER_NAME_FALLBACK).strip(),
+        })
+        password = (body.get("password") or "").strip()
+        if password:  # 留空沿用已保存的授权码
+            raw["password"] = password
+        raw.setdefault("password", "")
+        try:
+            with open(mailer.CONFIG_FILE, "w", encoding="utf-8") as f:
+                json.dump(raw, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            return self._send_json(500, {"error": "SAVE_FAIL", "message": "保存邮件配置失败：%s" % e})
+        return self._send_json(200, self._email_config_view())
+
+    def _test_email_config(self):
+        body = self._read_body()
+        saved = self._email_config_view()
+        password = (body.get("password") or "").strip()
+        if not password:
+            try:
+                with open(mailer.CONFIG_FILE, encoding="utf-8") as f:
+                    password = str(json.load(f).get("password") or "")
+            except Exception:
+                password = ""
+        try:
+            port = int(body.get("port") or saved.get("port") or 465)
+        except (TypeError, ValueError):
+            port = 465
+        cfg = {
+            "host": (body.get("host") or "").strip() or saved.get("host", ""),
+            "port": port,
+            "use_ssl": bool(body.get("use_ssl", saved.get("use_ssl", True))),
+            "use_starttls": bool(body.get("use_starttls", saved.get("use_starttls", False))),
+            "username": (body.get("username") or "").strip() or saved.get("username", ""),
+            "password": password,
+            "sender": (body.get("sender") or "").strip() or (body.get("username") or "").strip() or saved.get("sender", ""),
+            "sender_name": (body.get("sender_name") or "").strip() or saved.get("sender_name", ""),
+        }
+        to = (body.get("to") or "").strip() or cfg["sender"] or cfg["username"]
+        if not (cfg["host"] and cfg["username"] and cfg["password"] and to):
+            return self._send_json(400, {"error": "EMAIL_NOT_CONFIGURED",
+                                         "message": "请先填写 SMTP 服务器、发件账号和授权码。"})
+        try:
+            mailer.send_test_email(to, cfg=cfg)
+        except Exception as e:
+            return self._send_json(502, {"error": "TEST_FAIL", "message": "测试邮件发送失败：%s" % e})
+        return self._send_json(200, {"ok": True, "to": to, "message": "测试邮件已发送到 %s，请查收。" % to})
 
     # ---- 删除错题 ----
     def _delete_question(self):

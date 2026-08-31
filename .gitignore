@@ -1,5 +1,6 @@
 # 个人数据（不提交）
 config/ai_config.json
+config/email_config.json
 错题库/*
 !错题库/.gitkeep
 index.html

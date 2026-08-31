@@ -28,6 +28,7 @@ PowerShell 对中文引号、反斜杠、三引号 `'''`、`\"` 的转义会反�
 ## 账号、数据库与同步
 - SQLite 数据层：`scripts/storage.py`；运行库默认是 `data/sql_review.db`，禁止提交 Git。
 - 第一个注册账号为管理员，并自动导入 `错题库/` 中现有 Markdown；后续账号数据必须严格隔离。
+- 新注册账号必须填写唯一有效邮箱；登录接口的 `username` 字段同时接受账号名或邮箱。历史账号允许邮箱为空并继续按账号名登录。
 - 网页和小程序增量同步协议见 `docs/CLOUD_SYNC.md`，错题更新必须保留版本冲突检测，离线复习事件必须保持幂等。
 - `config/`、`data/`、`scripts/`、`tests/`、`错题库/` 不得通过静态服务器直接访问。
 - 回归测试：`python -m unittest discover -s tests -v`；前端语法检查：`node tests/check_frontend.mjs`。

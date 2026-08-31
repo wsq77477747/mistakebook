@@ -266,7 +266,34 @@
   .auth-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:8px}
   .auth-actions button{padding:11px;border-radius:9px;font-weight:700;cursor:pointer}
   .auth-state{font-size:12.5px;min-height:20px;color:var(--muted);margin-top:8px}
+  .auth-remember{display:flex;align-items:center;gap:7px;font-size:13px;color:#4b5163;margin:14px 0 0;cursor:pointer}
+  .auth-remember input{width:auto;margin:0;accent-color:var(--brand)}
+  .code-row{display:flex;gap:8px}
+  .code-row input{flex:1;letter-spacing:4px}
+  .code-row .btn-plain{white-space:nowrap;padding:0 14px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer}
+  .code-row .btn-plain:disabled{opacity:.55;cursor:not-allowed}
+  .cfg-sep{border:none;border-top:1px dashed var(--line);margin:20px 0 4px}
+  .cfg-sub{font-size:13.5px;font-weight:700;color:#4b5163;margin:12px 0 0}
+  .cfg-grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+  .cfg-checks{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:#4b5163;margin:8px 0 2px}
+  .cfg-checks label{display:flex;align-items:center;gap:6px;margin:0;cursor:pointer}
+  .cfg-checks input{width:auto;margin:0}
   .empty-library{text-align:center;padding:54px 20px;color:var(--muted);background:#fff;border:1px dashed var(--line);border-radius:14px}
+  .me-card{display:flex;gap:16px;align-items:center;flex-wrap:wrap;background:var(--brand);color:#fff;border-radius:16px;padding:20px 22px}
+  .me-avatar{font-size:40px;width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center}
+  .me-info{flex:1;min-width:160px}
+  .me-info h2{margin:0 0 4px;font-size:20px}
+  .me-info .meta{margin:0 0 6px;opacity:.85}
+  .me-info .chip{background:rgba(255,255,255,.2);color:#fff;border:none;margin-left:0}
+  .me-stats{display:flex;gap:10px}
+  .me-stats .review-kpi{background:rgba(255,255,255,.16);min-width:104px;padding:10px 14px}
+  .me-stats .review-kpi strong{font-size:22px}
+  .me-section{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-top:16px}
+  .me-section h3{margin:0 0 8px;font-size:15px}
+  .import-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  .import-actions .btn-plain{padding:10px 16px;border-radius:9px;font-size:13.5px;font-weight:600;cursor:pointer}
+  .import-actions .btn-plain:disabled{opacity:.55;cursor:not-allowed}
+  .import-state{font-size:12.5px;color:var(--muted);margin-top:10px;white-space:pre-line;line-height:1.6}
 
   @media (max-width:900px){
     header{padding:12px 18px}.layout{display:block}.layout nav{display:none}main{padding:18px}
@@ -276,8 +303,8 @@
   @media (max-width:600px){
     body{padding-bottom:72px}header{position:static;padding:12px 16px}.hrow{gap:6px 10px}
     header h1{font-size:19px}.stats{width:100%;order:3}.user-chip{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:80;background:#fff;border-top:1px solid var(--line);margin:0;padding:7px 8px calc(7px + env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
-    .tab{padding:8px 3px;font-size:11.5px;line-height:1.2}.review-shell,.panel,main{padding:16px}
+    .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:80;background:#fff;border-top:1px solid var(--line);margin:0;padding:7px 6px calc(7px + env(safe-area-inset-bottom));display:flex;gap:2px;overflow-x:auto}
+    .tab{flex:1 0 auto;padding:8px 6px;font-size:11.5px;line-height:1.2;white-space:nowrap}.review-shell,.panel,main{padding:16px}
     .review-hero{align-items:flex-start}.review-hero h2{font-size:23px}.review-kpi{min-width:92px;padding:10px 12px}.review-kpi strong{font-size:24px}
     .review-card{padding:17px;border-radius:15px}.review-card-head h3{font-size:18px;min-width:100%}.qcard{padding:14px}.qhead h3{min-width:calc(100% - 52px)}
     .qhead .meta{width:100%;display:flex;gap:5px;align-items:center;flex-wrap:wrap}.chip{margin-left:0}
@@ -378,6 +405,7 @@
     <button class="tab" data-tab="list">📚 错题列表</button>
     <button class="tab" data-tab="trend">📊 趋势分析</button>
     <button class="tab" data-tab="search">🔍 智能检索</button>
+    <button class="tab" data-tab="me">👤 我的</button>
     <button class="tab" data-tab="analytics" id="tab-analytics-btn" hidden>📈 数据分析</button>
   </div>
 </header>
@@ -501,6 +529,35 @@
   </div>
 </section>
 
+<!-- ⑤ 个人主页 -->
+<section id="tab-me" class="panel" hidden>
+  <div class="me-card">
+    <div class="me-avatar">👤</div>
+    <div class="me-info">
+      <h2 id="me-username"></h2>
+      <p class="meta" id="me-email"></p>
+      <span class="chip" id="me-role"></span>
+    </div>
+    <div class="me-stats">
+      <div class="review-kpi"><strong id="me-total">0</strong><span>错题总数</span></div>
+      <div class="review-kpi"><strong id="me-mastered">0</strong><span>已掌握</span></div>
+      <div class="review-kpi"><strong id="me-due">0</strong><span>今日待复习</span></div>
+    </div>
+  </div>
+  <div class="me-section">
+    <h3>📥 导入错题</h3>
+    <p class="meta">把本机的 Markdown 错题文件（含「模板.md」那种 frontmatter 格式，也支持纯正文）批量导入到本账号；也可以用 AI 识别错题图片或粘贴文本自动整理入库。重复导入相同文件会自动跳过，不会产生重复错题。</p>
+    <div class="import-actions">
+      <button class="btn-plain" id="me-import-btn">📄 选择 Markdown 文件</button>
+      <button class="btn-plain" id="me-import-folder">📁 选择整个文件夹</button>
+      <button class="btn-plain" id="me-ai-import">🤖 AI 识别图片导入</button>
+      <input type="file" id="import-files" accept=".md,.markdown,text/markdown" multiple hidden>
+      <input type="file" id="import-folder" webkitdirectory hidden>
+    </div>
+    <div class="import-state" id="import-state"></div>
+  </div>
+</section>
+
 <footer>账号数据、复习记录与同步进度由服务端数据库保存 · Markdown 文件保留为可迁移备份</footer>
 
 <!-- AI 浮窗 -->
@@ -581,6 +638,28 @@
       </div>
       <div id="cfg-preset-list"></div>
     </div>
+    <hr class="cfg-sep">
+    <h4 class="cfg-sub">📧 注册邮箱验证码（SMTP）</h4>
+    <div class="cfg-checks">
+      <label><input type="checkbox" id="emc-enabled"> 启用后注册需填邮箱验证码</label>
+    </div>
+    <div class="cfg-grid2">
+      <label>SMTP 服务器<input id="emc-host" placeholder="smtp.qq.com"></label>
+      <label>端口<input id="emc-port" type="number" value="465"></label>
+      <label>发件账号<input id="emc-user" placeholder="you@qq.com"></label>
+      <label>授权码 / 密码<input id="emc-pass" type="password" placeholder="留空沿用已保存授权码"></label>
+      <label>发件人地址<input id="emc-sender" placeholder="默认同发件账号"></label>
+      <label>发件人名称<input id="emc-name" placeholder="SQL 错题本"></label>
+    </div>
+    <div class="cfg-checks">
+      <label><input type="checkbox" id="emc-ssl" checked> SSL（465 端口勾选）</label>
+      <label><input type="checkbox" id="emc-starttls"> STARTTLS（587 端口勾选）</label>
+    </div>
+    <div class="mrow" style="margin-top:10px">
+      <button class="btn-plain" id="emc-test-btn">📧 发送测试邮件</button>
+      <button class="btn-plain" id="emc-save">保存邮件配置</button>
+    </div>
+    <div class="cfg-state" id="emc-state"></div>
     <div class="mrow">
       <button class="btn-plain" id="cfg-test-btn">🔌 测试连接</button>
       <button class="btn-plain" id="cfg-cancel">取消</button>
@@ -595,9 +674,20 @@
     <div class="auth-brand"><div class="logo">📚</div><h2>进入 SQL 错题本</h2><p>一个账号同步电脑和小程序的错题与复习进度</p></div>
     <label>账号或邮箱</label><input id="auth-username" autocomplete="username" placeholder="至少 3 个字符">
     <label>密码</label><input id="auth-password" type="password" autocomplete="current-password" placeholder="至少 8 个字符">
+    <div id="auth-email-row" hidden>
+      <label>邮箱（注册必填）</label><input id="auth-email" type="email" autocomplete="email" placeholder="name@example.com">
+    </div>
+    <div id="auth-code-row" hidden>
+      <label>邮箱验证码</label>
+      <div class="code-row">
+        <input id="auth-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="6 位数字">
+        <button type="button" class="btn-plain" id="auth-send-code">发送验证码</button>
+      </div>
+    </div>
+    <label class="auth-remember"><input type="checkbox" id="auth-remember" checked> 30 天内自动登录</label>
     <div class="auth-actions">
       <button class="btn-primary" id="auth-login">登录</button>
-      <button class="btn-plain" id="auth-register">创建账号并导入本地错题</button>
+      <button class="btn-plain" id="auth-register">创建账号</button>
     </div>
     <div class="auth-state" id="auth-state"></div>
   </div>
@@ -622,11 +712,32 @@ async function apiJson(url,options){
   if(r.status===401){showAuth();throw new Error('AUTH_REQUIRED');}
   if(!r.ok)throw new Error(j.message||'请求失败');return j;
 }
+let registerCfg={email_code_required:false};
+function refreshRegisterCfg(){
+  fetch('/api/auth/register_config').then(r=>r.json()).then(c=>{registerCfg=c||{email_code_required:false};}).catch(()=>{});
+}
 function showAuth(message){
   document.getElementById('auth-modal').hidden=false;
+  refreshRegisterCfg();
   document.getElementById('auth-state').textContent=message||'首次使用请创建账号；第一个账号会自动导入现有 Markdown 错题。';
 }
-function hideAuth(){document.getElementById('auth-modal').hidden=true;document.getElementById('auth-password').value='';}
+let codeTimer=null;
+function resetCodeBtn(){
+  if(codeTimer){clearInterval(codeTimer);codeTimer=null;}
+  const btn=document.getElementById('auth-send-code');
+  if(btn){btn.disabled=false;btn.textContent='发送验证码';}
+}
+function startCodeCountdown(sec){
+  const btn=document.getElementById('auth-send-code');
+  btn.disabled=true;btn.textContent=sec+' 秒后可重发';
+  if(codeTimer)clearInterval(codeTimer);
+  codeTimer=setInterval(()=>{
+    sec--;
+    if(sec<=0){clearInterval(codeTimer);codeTimer=null;btn.disabled=false;btn.textContent='发送验证码';}
+    else btn.textContent=sec+' 秒后可重发';
+  },1000);
+}
+function hideAuth(){document.getElementById('auth-modal').hidden=true;document.getElementById('auth-password').value='';document.getElementById('auth-email').value='';document.getElementById('auth-code').value='';document.getElementById('auth-email-row').hidden=true;document.getElementById('auth-code-row').hidden=true;document.getElementById('auth-remember').checked=true;resetCodeBtn();}
 async function initAccount(){
   try{
     const j=await apiJson('/api/auth/me');
@@ -641,20 +752,63 @@ async function enterAccount(user){
   if(user.is_admin){document.getElementById('tab-analytics-btn').hidden=false;}
   await loadQuestions();await loadToday();refreshCurrentModel();
 }
+const EMAIL_RE=/^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
 async function submitAuth(mode){
   const username=document.getElementById('auth-username').value.trim();
   const password=document.getElementById('auth-password').value;
+  const emailRow=document.getElementById('auth-email-row');
+  const email=document.getElementById('auth-email').value.trim();
   const state=document.getElementById('auth-state');
   if(username.length<3||password.length<8){state.textContent='账号至少 3 个字符，密码至少 8 个字符。';return;}
+  const payload={username,password,remember_me:document.getElementById('auth-remember').checked};
+  if(mode==='register'){
+    if(emailRow.hidden){
+      emailRow.hidden=false;
+      if(registerCfg.email_code_required)document.getElementById('auth-code-row').hidden=false;
+      document.getElementById('auth-email').focus();
+      state.textContent=registerCfg.will_import_local
+        ?'注册需要填写邮箱；本机检测到错题库 Markdown，首个账号创建后会自动导入。'
+        :'注册需要填写邮箱，填好后再点一次「创建账号」。登录后可在「我的」页批量导入错题。';
+      return;
+    }
+    if(!EMAIL_RE.test(email)||email.length>254){state.textContent='邮箱格式不正确，请填写形如 name@example.com 的地址。';return;}
+    payload.email=email;
+    if(registerCfg.email_code_required){
+      const code=document.getElementById('auth-code').value.trim();
+      if(!/^\d{6}$/.test(code)){state.textContent='请先点击「发送验证码」，再填写邮箱收到的 6 位验证码。';return;}
+      payload.email_code=code;
+    }
+  }
   state.textContent=mode==='register'?'正在创建账号并迁移本地错题…':'正在登录…';
   try{
-    const j=await apiJson('/api/auth/'+mode,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
+    const j=await apiJson('/api/auth/'+mode,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     state.textContent=j.imported?'已导入 '+j.imported+' 道本地错题。':'';await enterAccount(j.user);
   }catch(e){state.textContent=e.message==='AUTH_REQUIRED'?'登录状态无效，请重试。':e.message;}
 }
 document.getElementById('auth-login').addEventListener('click',()=>submitAuth('login'));
 document.getElementById('auth-register').addEventListener('click',()=>submitAuth('register'));
 document.getElementById('auth-password').addEventListener('keydown',e=>{if(e.key==='Enter')submitAuth('login');});
+document.getElementById('auth-send-code').addEventListener('click',async()=>{
+  const email=document.getElementById('auth-email').value.trim();
+  const state=document.getElementById('auth-state');
+  if(!EMAIL_RE.test(email)||email.length>254){state.textContent='请先填写正确的邮箱，再发送验证码。';return;}
+  const btn=document.getElementById('auth-send-code');
+  btn.disabled=true;btn.textContent='发送中…';
+  try{
+    const r=await fetch('/api/auth/send_code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+    const j=await r.json().catch(()=>({}));
+    if(r.ok&&j.ok){
+      state.textContent='✅ 验证码已发送到 '+email+'（'+(j.ttl_minutes||10)+' 分钟内有效，没收到就看看垃圾邮件）';
+      startCodeCountdown(j.resend_interval_seconds||60);
+    }else{
+      resetCodeBtn();
+      state.textContent='❌ '+(j.message||'发送失败，请稍后再试。');
+    }
+  }catch(e){
+    resetCodeBtn();
+    state.textContent='❌ 发送失败：本地服务未启动？';
+  }
+});
 document.getElementById('logout-btn').addEventListener('click',async()=>{
   await fetch('/api/auth/logout',{method:'POST'});currentUser=null;window.__QUIZ_DATA__=[];
   document.getElementById('user-area').hidden=true;renderLibrary();showAuth('已安全退出。');
@@ -733,11 +887,56 @@ document.querySelectorAll('.rating-btn').forEach(btn=>btn.addEventListener('clic
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
   const active=document.querySelector('.tab[data-tab="'+name+'"]');if(active)active.classList.add('active');
-  ['today','list','trend','search','analytics'].forEach(t=>{const el=document.getElementById('tab-'+t);if(el)el.hidden=(name!==t);});
+  ['today','list','trend','search','analytics','me'].forEach(t=>{const el=document.getElementById('tab-'+t);if(el)el.hidden=(name!==t);});
   if(name==='trend')renderTrend();
   if(name==='today')loadToday();
   if(name==='analytics')loadAnalytics();
+  if(name==='me')renderMe();
 }
+function renderMe(){
+  if(!currentUser)return;
+  const D=window.__QUIZ_DATA__;
+  document.getElementById('me-username').textContent=currentUser.username;
+  document.getElementById('me-email').textContent=currentUser.email||'未绑定邮箱';
+  document.getElementById('me-role').textContent=currentUser.is_admin?'站点管理员':'普通成员';
+  document.getElementById('me-total').textContent=D.length;
+  document.getElementById('me-mastered').textContent=D.filter(q=>q.status==='已掌握').length;
+  document.getElementById('me-due').textContent=todayStats.due;
+}
+async function runImport(fileList){
+  const state=document.getElementById('import-state');
+  const btns=[document.getElementById('me-import-btn'),document.getElementById('me-import-folder')];
+  const mdFiles=[...fileList].filter(f=>/\.markdown?$/i.test(f.name));
+  const oversized=[...fileList].filter(f=>/\.markdown?$/i.test(f.name)&&f.size>1024*1024).map(f=>f.name);
+  if(!mdFiles.length){state.textContent='⚠️ 未选择任何 .md Markdown 文件（图片和其它类型会自动忽略）。';return;}
+  btns.forEach(b=>b.disabled=true);
+  state.textContent='⏳ 正在读取并导入 '+mdFiles.length+' 个文件…';
+  try{
+    const files=[];
+    for(const f of mdFiles){
+      if(f.size<=1024*1024)files.push({name:f.name,content:await f.text()});
+    }
+    const j=await apiJson('/api/import_batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({files})});
+    const lines=['✅ 成功导入 '+j.imported+' 个文件。'];
+    (j.skipped||[]).forEach(s=>lines.push('⏭ '+s.name+'：'+s.reason));
+    (j.failed||[]).forEach(f=>lines.push('❌ '+f.name+'：'+f.error));
+    oversized.forEach(n=>lines.push('❌ '+n+'：文件过大（超过 1MB）'));
+    if((j.skipped||[]).length&&!j.imported)lines.push('提示：这些文件之前已导入过；如需修改请直接在错题列表里编辑。');
+    state.textContent=lines.join('\n');
+    await loadQuestions();renderMe();
+  }catch(e){state.textContent='❌ 导入失败：'+(e.message==='AUTH_REQUIRED'?'请先登录。':e.message||'本地服务未启动？');}
+  finally{btns.forEach(b=>b.disabled=false);}
+}
+document.getElementById('me-import-btn').addEventListener('click',()=>document.getElementById('import-files').click());
+document.getElementById('me-import-folder').addEventListener('click',()=>document.getElementById('import-folder').click());
+document.getElementById('import-files').addEventListener('change',e=>{const fl=e.target.files;e.target.value='';if(fl.length)runImport(fl);});
+document.getElementById('import-folder').addEventListener('change',e=>{const fl=e.target.files;e.target.value='';if(fl.length)runImport(fl);});
+document.getElementById('me-ai-import').addEventListener('click',()=>{
+  document.getElementById('ai-panel').hidden=false;
+  const addBtn=document.querySelector('.ai-modes .mode-btn[data-mode="add"]');
+  if(addBtn&&!addBtn.classList.contains('active'))addBtn.click();
+  document.getElementById('add-state').textContent='📷 上传、粘贴错题截图或直接粘贴文字，点「AI 整理归类」自动入库。';
+});
 document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
 
 /* ================= 数据分析 ================= */
@@ -1324,6 +1523,7 @@ function openSettings(){
     renderPresets(c.presets||[]);
     applyCfgToUI(c);
   }).catch(()=>{setState('⚠️ 无法读取配置（本地服务未启动？）');});
+  refreshEmailCfg();
 }
 document.getElementById('ai-settings-btn').addEventListener('click',openSettings);
 document.getElementById('cfg-cancel').addEventListener('click',()=>{document.getElementById('ai-modal').hidden=true;});
@@ -1378,6 +1578,54 @@ document.getElementById('cfg-preset-list').addEventListener('click',e=>{
       .then(r=>r.json()).then(()=>refreshPresets())
       .catch(()=>{});
   }
+});
+
+/* ===== 邮件配置（管理员） ===== */
+function emcForm(){return {
+  enabled:document.getElementById('emc-enabled').checked,
+  host:document.getElementById('emc-host').value.trim(),
+  port:document.getElementById('emc-port').value.trim(),
+  use_ssl:document.getElementById('emc-ssl').checked,
+  use_starttls:document.getElementById('emc-starttls').checked,
+  username:document.getElementById('emc-user').value.trim(),
+  password:document.getElementById('emc-pass').value,
+  sender:document.getElementById('emc-sender').value.trim(),
+  sender_name:document.getElementById('emc-name').value.trim()
+};}
+function setEmcState(msg){document.getElementById('emc-state').textContent=msg;}
+function fillEmailCfg(c){
+  document.getElementById('emc-enabled').checked=!!c.enabled;
+  document.getElementById('emc-host').value=c.host||'';
+  document.getElementById('emc-port').value=c.port||465;
+  document.getElementById('emc-ssl').checked=c.use_ssl!==false;
+  document.getElementById('emc-starttls').checked=!!c.use_starttls;
+  document.getElementById('emc-user').value=c.username||'';
+  document.getElementById('emc-pass').value='';
+  document.getElementById('emc-sender').value=c.sender||'';
+  document.getElementById('emc-name').value=c.sender_name||'';
+  setEmcState(c.register_code_required?'✅ 邮件服务已启用，注册需要邮箱验证码':'⚠️ 未启用：注册暂不需要验证码，填好保存后生效');
+}
+function refreshEmailCfg(){fetch('/api/email/config').then(r=>r.json()).then(fillEmailCfg).catch(()=>{});}
+document.getElementById('emc-save').addEventListener('click',()=>{
+  const f=emcForm();
+  if(f.enabled&&(!f.host||!f.username)){setEmcState('⛔ 启用前请填写 SMTP 服务器和发件账号');return;}
+  const body=f;
+  if(!f.password)delete body.password;
+  fetch('/api/email/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(r=>r.json()).then(c=>{
+      fillEmailCfg(c);refreshRegisterCfg();
+      setEmcState(c.register_code_required?'✅ 已保存，注册现在需要邮箱验证码':'已保存（当前未启用验证码）');
+    })
+    .catch(()=>setEmcState('⚠️ 保存失败：本地服务未启动？'));
+});
+document.getElementById('emc-test-btn').addEventListener('click',()=>{
+  const f=emcForm();
+  if(!f.host||!f.username){setEmcState('⛔ 请先填写 SMTP 服务器和发件账号');return;}
+  setEmcState('⏳ 正在发送测试邮件…');
+  fetch('/api/email/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(f)})
+    .then(r=>r.json().catch(()=>({})))
+    .then(j=>setEmcState((j.ok?'✅ ':'❌ ')+(j.message||'测试失败')))
+    .catch(()=>setEmcState('❌ 测试失败：本地服务未启动？'));
 });
 
 /* ===== 全局：删除错题 ===== */

@@ -1,48 +1,124 @@
-name: Deploy to Server
+name: Test and Deploy
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:  # 支持手动触发
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sql-wrongbook-production
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  test:
+    name: Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Set up Python
+        uses: actions/setup-python@v7
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          script: |
-            set -e
+          python-version: "3.12"
 
-            echo "=== 1. 进入项目目录 ==="
-            cd /opt/sql-wrongbook/app
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
 
-            echo "=== 2. 拉取最新代码 ==="
-            sudo git pull origin main
+      - name: Run backend tests
+        run: python -m unittest discover -s tests -v
 
-            echo "=== 3. 重启应用服务 ==="
-            sudo systemctl restart sql-wrongbook
+      - name: Check frontend syntax
+        run: node tests/check_frontend.mjs
 
-            echo "=== 4. 等待服务启动 ==="
-            sleep 3
+      - name: Check deployment script
+        run: bash -n deploy/update_native.sh
 
-            echo "=== 5. 健康检查 ==="
-            if curl -fsS http://127.0.0.1/api/auth/me > /dev/null 2>&1; then
-              echo "✅ 部署成功，服务正常运行"
-              sudo systemctl --no-pager --full status sql-wrongbook | head -n 8
-            else
-              echo "❌ 部署失败，服务无响应"
-              sudo journalctl -u sql-wrongbook -n 50 --no-pager
+  deploy:
+    name: Deploy production
+    if: github.event_name != 'pull_request'
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PORT: ${{ secrets.SSH_PORT }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Validate deployment secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for value in SSH_HOST SSH_USER SSH_PORT SSH_PRIVATE_KEY SSH_KNOWN_HOSTS; do
+            if [[ -z "${!value:-}" ]]; then
+              echo "Missing repository secret: $value" >&2
               exit 1
             fi
+          done
 
-            echo "=== 6. 最近提交记录 ==="
-            git log --oneline -3
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/deploy_key"
+          chmod 600 "$HOME/.ssh/deploy_key"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Build release archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            -czf "$RUNNER_TEMP/sql-wrongbook-${GITHUB_SHA}.tar.gz" \
+            scripts assets deploy
+
+      - name: Upload release archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          scp \
+            -P "$SSH_PORT" \
+            -i "$HOME/.ssh/deploy_key" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            "$RUNNER_TEMP/sql-wrongbook-${GITHUB_SHA}.tar.gz" \
+            "$SSH_USER@$SSH_HOST:/tmp/sql-wrongbook-${GITHUB_SHA}.tar.gz"
+
+      - name: Activate release
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh \
+            -p "$SSH_PORT" \
+            -i "$HOME/.ssh/deploy_key" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            "$SSH_USER@$SSH_HOST" \
+            "REMOTE_ARCHIVE='/tmp/sql-wrongbook-${GITHUB_SHA}.tar.gz' bash -s" <<'REMOTE'
+          set -euo pipefail
+          work_dir="$(mktemp -d /tmp/sql-wrongbook-release.XXXXXX)"
+          cleanup() {
+            rm -rf -- "$work_dir" "$REMOTE_ARCHIVE"
+          }
+          trap cleanup EXIT
+          tar -xzf "$REMOTE_ARCHIVE" -C "$work_dir"
+          cd "$work_dir"
+          bash deploy/update_native.sh
+          REMOTE
