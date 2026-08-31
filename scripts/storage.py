@@ -186,6 +186,9 @@ def init_db():
             ("invite_bonus", "INTEGER NOT NULL DEFAULT 0"),
             ("invited_by", "TEXT"),
             ("ai_config", "TEXT NOT NULL DEFAULT ''"),
+            ("avatar", "TEXT NOT NULL DEFAULT ''"),
+            ("display_name", "TEXT NOT NULL DEFAULT ''"),
+            ("bio", "TEXT NOT NULL DEFAULT ''"),
         ):
             if col not in user_columns:
                 db.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
@@ -274,7 +277,8 @@ def register_user(username, password, email, invite_code=None):
     imported = import_legacy_questions(user_id) if first_user else 0
     return {"id": user_id, "username": username, "email": email,
             "is_admin": first_user, "imported": imported,
-            "invite_code": my_code, "invite_applied": bool(inviter_id)}
+            "invite_code": my_code, "invite_applied": bool(inviter_id),
+            "avatar": "", "display_name": "", "bio": ""}
 
 
 def email_registered(email_norm):
@@ -294,8 +298,63 @@ def user_by_email(email):
         ).fetchone()
     if not row:
         return None
-    return {"id": row["id"], "username": row["username"], "email": row["email"],
-            "is_admin": bool(row["is_admin"])}
+    return _user_public(row)
+
+
+# ---- 用户资料 ----
+
+def _user_public(row):
+    """把 users 表行统一转成对外的用户信息字典。"""
+    if row is None:
+        return None
+    keys = row.keys()
+    return {
+        "id": row["id"],
+        "username": row["username"],
+        "email": row["email"] if "email" in keys else "",
+        "is_admin": bool(row["is_admin"]),
+        "avatar": row["avatar"] if "avatar" in keys else "",
+        "display_name": row["display_name"] if "display_name" in keys else "",
+        "bio": row["bio"] if "bio" in keys else "",
+        "invite_code": row["invite_code"] if "invite_code" in keys else "",
+    }
+
+
+def get_profile(user_id):
+    """获取用户完整资料。"""
+    with connect() as db:
+        row = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+    return _user_public(row)
+
+
+def update_profile(user_id, display_name=None, bio=None, avatar=None):
+    """更新用户资料；只更新传入的字段。返回更新后的资料。"""
+    sets, params = [], []
+    if display_name is not None:
+        name = str(display_name).strip()[:40]
+        sets.append("display_name=?")
+        params.append(name)
+    if bio is not None:
+        b = str(bio).strip()[:200]
+        sets.append("bio=?")
+        params.append(b)
+    if avatar is not None:
+        av = str(avatar or "")
+        # 头像限制 300KB（data URL），防止数据库膨胀
+        if len(av) > 300_000:
+            raise ValueError("头像图片过大，请压缩到 200KB 以内。")
+        if av and not (av.startswith("data:image/")):
+            raise ValueError("头像格式不正确。")
+        sets.append("avatar=?")
+        params.append(av)
+    if not sets:
+        return get_profile(user_id)
+    sets.append("updated_at=?")
+    params.append(_now())
+    params.append(user_id)
+    with connect() as db:
+        db.execute(f"UPDATE users SET {','.join(sets)} WHERE id=?", params)
+    return get_profile(user_id)
 
 
 # ---- 用户级 AI 配置与每日免费额度 ----
@@ -376,8 +435,7 @@ def authenticate(username, password):
     actual = _password_digest(str(password or ""), row["password_salt"])
     if not hmac.compare_digest(actual, row["password_hash"]):
         return None
-    return {"id": row["id"], "username": row["username"], "email": row["email"],
-            "is_admin": bool(row["is_admin"])}
+    return _user_public(row)
 
 
 def create_session(user_id, persistent=True):
@@ -424,12 +482,11 @@ def user_for_session(token):
     token_hash = hashlib.sha256(str(token).encode("ascii", "ignore")).hexdigest()
     with connect() as db:
         row = db.execute(
-            "SELECT u.id,u.username,u.email,u.is_admin FROM sessions s JOIN users u ON u.id=s.user_id "
+            "SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id "
             "WHERE s.token_hash=? AND s.expires_at>?",
             (token_hash, _now()),
         ).fetchone()
-    return ({"id": row["id"], "username": row["username"], "email": row["email"],
-             "is_admin": bool(row["is_admin"])} if row else None)
+    return _user_public(row) if row else None
 
 
 def delete_session(token):

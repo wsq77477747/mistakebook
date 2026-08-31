@@ -505,6 +505,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._ai_quota()
         if path == "/api/my_ai_config":
             return self._send_json(200, self._my_ai_config_view())
+        if path == "/api/profile":
+            return self._send_json(200, {"profile": storage.get_profile(self.user["id"])})
         if path == "/api/email/config":
             if not self.user.get("is_admin"):
                 return self._send_json(403, {"error": "ADMIN_REQUIRED", "message": "只有站点管理员可以查看邮件配置。"})
@@ -549,6 +551,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._import_batch()
         if path == "/api/my_ai_config":
             return self._save_my_ai_config()
+        if path == "/api/profile":
+            return self._save_profile()
         if path == "/api/config" and not self.user.get("is_admin"):
             return self._send_json(403, {"error": "ADMIN_REQUIRED", "message": "只有站点管理员可以修改站点 AI 配置。"})
         if path in {"/api/email/config", "/api/email/test"} and not self.user.get("is_admin"):
@@ -594,7 +598,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             token = storage.create_session(user["id"], persistent=remember)
             response = {"ok": True,
                         "user": {"id": user["id"], "username": user["username"], "email": user["email"],
-                                 "is_admin": user["is_admin"]},
+                                 "is_admin": user["is_admin"], "avatar": user.get("avatar", ""),
+                                 "display_name": user.get("display_name", ""), "bio": user.get("bio", "")},
                         "imported": user["imported"],
                         "invite_applied": bool(user.get("invite_applied"))}
             if body.get("client_type") == "mini_program":
@@ -708,6 +713,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._track_event("review", metadata={"question_id": str(body.get("question_id", ""))[:36], "rating": body.get("rating")})
         except (KeyError, ValueError) as exc:
             self._send_json(400, {"error": "REVIEW_FAILED", "message": str(exc)})
+
+    # ---- 个人资料 ----
+    def _save_profile(self):
+        body = self._read_body()
+        try:
+            profile = storage.update_profile(
+                self.user["id"],
+                display_name=body.get("display_name") if "display_name" in body else None,
+                bio=body.get("bio") if "bio" in body else None,
+                avatar=body.get("avatar") if "avatar" in body else None,
+            )
+            self._track_event("update_profile")
+            self._send_json(200, {"ok": True, "profile": profile})
+        except ValueError as exc:
+            self._send_json(400, {"error": "PROFILE_FAIL", "message": str(exc)})
 
     # ---- 配置 ----
     def _get_config(self):

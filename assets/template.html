@@ -125,9 +125,19 @@
   .rel-title{font-size:13px;color:var(--muted);margin:14px 0 8px;}
 
   /* ---------- AI 浮窗 ---------- */
-  #ai-fab{position:fixed;right:22px;bottom:22px;width:56px;height:56px;border-radius:50%;
-          background:linear-gradient(135deg,#2f6fed,#6d28d9);color:#fff;border:none;font-size:26px;
-          cursor:pointer;box-shadow:0 6px 20px rgba(45,80,200,.35);z-index:50;}
+  #ai-fab{position:fixed;right:22px;bottom:22px;width:58px;height:58px;border-radius:50%;
+          background:linear-gradient(135deg,#2f6fed,#6d28d9);color:#fff;border:none;
+          cursor:pointer;box-shadow:0 6px 22px rgba(70,60,220,.4);z-index:50;
+          display:flex;align-items:center;justify-content:center;transition:transform .2s}
+  #ai-fab svg{width:30px;height:30px}
+  #ai-fab:hover{transform:scale(1.08) rotate(-4deg)}
+  #ai-fab::before{content:"";position:absolute;inset:0;border-radius:50%;
+                  background:linear-gradient(135deg,#2f6fed,#6d28d9);z-index:-1;
+                  animation:aiPulse 2.4s ease-out infinite}
+  @keyframes aiPulse{0%{transform:scale(1);opacity:.5}70%{transform:scale(1.5);opacity:0}100%{transform:scale(1.5);opacity:0}}
+  .ai-head-icon{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#2f6fed,#6d28d9);
+                display:inline-flex;align-items:center;justify-content:center;color:#fff}
+  .ai-head-icon svg{width:16px;height:16px}
   #ai-panel{position:fixed;right:22px;bottom:90px;width:390px;height:560px;max-height:80vh;background:var(--card);
             border:1px solid var(--line);border-radius:16px;box-shadow:0 12px 40px rgba(20,30,60,.25);
             display:flex;flex-direction:column;z-index:51;overflow:hidden;}
@@ -257,21 +267,73 @@
   .category-filter::-webkit-scrollbar{display:none}
   .category-filter button{white-space:nowrap;border:1px solid var(--line);background:#fff;color:#4b5163;border-radius:999px;padding:7px 12px;cursor:pointer}
   .category-filter button.active{background:var(--brand);border-color:var(--brand);color:#fff}
-  .auth-box{width:420px;max-width:92vw}
-  .auth-brand{text-align:center;margin-bottom:18px}
-  .auth-brand .logo{font-size:34px}
-  .auth-brand h2{margin:5px 0 4px}
-  .auth-brand p{margin:0;color:var(--muted);font-size:13px}
-  .auth-box input{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:9px;margin:5px 0 10px;font-size:14px}
-  .auth-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:8px}
-  .auth-actions button{padding:11px;border-radius:9px;font-weight:700;cursor:pointer}
-  .auth-state{font-size:12.5px;min-height:20px;color:var(--muted);margin-top:8px}
+  /* 登录注册弹窗 */
+  #auth-modal{background:linear-gradient(135deg,rgba(47,111,237,.12),rgba(109,40,217,.12));backdrop-filter:blur(6px)}
+  .auth-box{width:430px;max-width:92vw;border-radius:20px;padding:30px 32px 24px;
+            box-shadow:0 20px 60px rgba(30,50,120,.22);border:1px solid rgba(255,255,255,.6);
+            background:rgba(255,255,255,.96);position:relative;overflow:hidden;
+            animation:authPop .35s cubic-bezier(.2,.9,.3,1.2)}
+  @keyframes authPop{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}
+  .auth-box::before{content:"";position:absolute;top:0;left:0;right:0;height:4px;
+                    background:linear-gradient(90deg,#2f6fed,#6d28d9,#ec4899)}
+  .auth-brand{text-align:center;margin-bottom:20px}
+  .auth-brand .logo{width:64px;height:64px;margin:0 auto 10px;border-radius:18px;
+                    background:linear-gradient(135deg,#2f6fed,#6d28d9);display:flex;align-items:center;justify-content:center;
+                    box-shadow:0 8px 20px rgba(70,80,220,.35)}
+  .auth-brand .logo svg{width:36px;height:36px}
+  .auth-brand h2{margin:4px 0;font-size:23px;background:linear-gradient(90deg,#1e40af,#6d28d9);
+                 -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;font-weight:800}
+  .auth-brand p{margin:0;color:var(--muted);font-size:12.5px}
+  .auth-box label{font-size:12.5px;font-weight:600;color:#5b6272;display:block;margin-bottom:2px}
+  .auth-box input{width:100%;padding:11px 14px;border:1.5px solid var(--line);border-radius:10px;
+                  margin:0 0 12px;font-size:14px;transition:all .18s;background:#fafbff}
+  .auth-box input:focus{border-color:var(--brand);background:#fff;box-shadow:0 0 0 3px var(--brand-soft);outline:none}
+  .auth-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:6px}
+  .auth-actions button{padding:12px;border-radius:10px;font-weight:700;cursor:pointer;font-size:14.5px;
+                       border:none;transition:all .18s}
+  .auth-actions .btn-primary{background:linear-gradient(135deg,#2f6fed,#4f46e5);color:#fff;
+                             box-shadow:0 4px 14px rgba(47,111,237,.35)}
+  .auth-actions .btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(47,111,237,.45)}
+  .auth-actions .btn-primary:active{transform:translateY(0)}
+  .auth-state{font-size:12.5px;min-height:20px;color:var(--muted);margin-top:10px;text-align:center}
   .auth-remember{display:flex;align-items:center;gap:7px;font-size:13px;color:#4b5163;margin:14px 0 0;cursor:pointer}
   .auth-remember input{width:auto;margin:0;accent-color:var(--brand)}
-  .auth-mode-toggle{margin-top:10px;font-size:13px;min-height:18px}
+  .auth-mode-toggle{margin-top:10px;font-size:13px;min-height:18px;text-align:right}
   .auth-mode-toggle a{color:var(--brand);cursor:pointer;text-decoration:none;font-weight:600}
-  .auth-alt{margin-top:12px;font-size:13px;color:var(--muted);text-align:center}
-  .auth-alt a{color:var(--brand);cursor:pointer;text-decoration:none;font-weight:600}
+  .auth-mode-toggle a:hover{text-decoration:underline}
+  .auth-alt{margin-top:14px;font-size:13px;color:var(--muted);text-align:center}
+  .auth-alt a{color:var(--brand);cursor:pointer;text-decoration:none;font-weight:700}
+  .auth-alt a:hover{text-decoration:underline}
+  #auth-login-view,#auth-register-view{animation:fadeSlide .25s ease}
+  @keyframes fadeSlide{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:none}}
+
+  /* 通用头像 */
+  .avatar{border-radius:50%;object-fit:cover;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;
+          font-weight:700;color:#fff;overflow:hidden;background:linear-gradient(135deg,#2f6fed,#6d28d9)}
+  .avatar img{width:100%;height:100%;object-fit:cover}
+  .user-chip{display:inline-flex;align-items:center;gap:7px}
+  .user-chip .avatar{width:26px;height:26px;font-size:12px}
+  .me-avatar{position:relative;cursor:pointer;width:72px;height:72px;border-radius:50%;font-size:28px;
+             background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;
+             color:#fff;font-weight:700;overflow:hidden;transition:transform .15s;border:2px solid rgba(255,255,255,.5)}
+  .me-avatar:hover{transform:scale(1.05)}
+  .me-avatar img{width:100%;height:100%;object-fit:cover}
+  .me-avatar .avatar-edit-badge{position:absolute;bottom:0;right:0;width:22px;height:22px;border-radius:50%;
+                                background:#fff;color:var(--brand);display:flex;align-items:center;justify-content:center;font-size:11px}
+  /* 头像选择弹窗 */
+  .avatar-picker{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:10px 0}
+  .avatar-picker .av-opt{aspect-ratio:1;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;
+                         color:#fff;font-weight:700;font-size:20px;border:3px solid transparent;transition:all .15s;position:relative}
+  .avatar-picker .av-opt:hover{transform:scale(1.1)}
+  .avatar-picker .av-opt.selected{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
+  .profile-upload-row{display:flex;align-items:center;gap:14px;margin:6px 0 12px}
+  .profile-upload-row .big-avatar{width:64px;height:64px;border-radius:50%;font-size:24px;overflow:hidden;
+                                  display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;background:linear-gradient(135deg,#2f6fed,#6d28d9)}
+  .profile-upload-row .big-avatar img{width:100%;height:100%;object-fit:cover}
+  .profile-meta{font-size:12.5px;color:var(--muted);line-height:1.6}
+  .me-display-name{font-size:13px;opacity:.9;margin:2px 0}
+  .me-bio{flex:0 0 100%;width:100%;font-size:13px;line-height:1.6;background:rgba(255,255,255,.14);border-radius:10px;padding:8px 12px;margin-top:4px;display:none}
+  .me-bio.show{display:block}
   .code-row{display:flex;gap:8px}
   .code-row input{flex:1;letter-spacing:4px}
   .code-row .btn-plain{white-space:nowrap;padding:0 14px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer}
@@ -404,7 +466,7 @@
     <h1>📚 SQL 错题本</h1>
     <span class="stats" id="header-stats">登录后自动同步学习进度</span>
     <div class="user-area" id="user-area" hidden>
-      <span class="user-chip"><i class="sync-dot"></i><span id="user-name"></span></span>
+      <span class="user-chip"><i class="sync-dot"></i><span class="avatar" id="top-avatar"></span><span id="user-name"></span></span>
       <button class="text-btn" id="logout-btn">退出</button>
     </div>
   </div>
@@ -540,9 +602,10 @@
 <!-- ⑤ 个人主页 -->
 <section id="tab-me" class="panel" hidden>
   <div class="me-card">
-    <div class="me-avatar">👤</div>
+    <div class="me-avatar" id="me-avatar" title="点击更换头像"></div>
     <div class="me-info">
       <h2 id="me-username"></h2>
+      <p class="me-display-name" id="me-display-name"></p>
       <p class="meta" id="me-email"></p>
       <span class="chip" id="me-role"></span>
     </div>
@@ -550,6 +613,14 @@
       <div class="review-kpi"><strong id="me-total">0</strong><span>错题总数</span></div>
       <div class="review-kpi"><strong id="me-mastered">0</strong><span>已掌握</span></div>
       <div class="review-kpi"><strong id="me-due">0</strong><span>今日待复习</span></div>
+    </div>
+    <div class="me-bio" id="me-bio"></div>
+  </div>
+  <div class="me-section">
+    <h3>✏️ 个人资料</h3>
+    <p class="meta">昵称和简介均为选填，填写后会展示在个人主页；头像可上传自定义图片或选择默认样式。</p>
+    <div class="import-actions">
+      <button class="btn-plain" id="profile-edit-btn">🎨 编辑资料与头像</button>
     </div>
   </div>
   <div class="me-section" id="me-ai-section">
@@ -591,9 +662,9 @@
 <footer>账号数据、复习记录与同步进度由服务端数据库保存 · Markdown 文件保留为可迁移备份</footer>
 
 <!-- AI 浮窗 -->
-<button id="ai-fab" title="AI 错题助手">🤖</button>
+<button id="ai-fab" title="AI 错题助手"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg></button>
 <div id="ai-panel" hidden>
-  <div class="ai-head">🤖 AI 错题助手 <span class="ai-model-chip" id="ai-model-chip" hidden></span>
+  <div class="ai-head"><span class="ai-head-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg></span> AI 错题助手 <span class="ai-model-chip" id="ai-model-chip" hidden></span>
     <button id="ai-settings-btn" title="设置 API">⚙️</button>
     <button id="ai-close" title="收起">✕</button>
   </div>
@@ -644,6 +715,33 @@
         <button id="add-regen">🔄 重新生成</button>
         <button id="add-cancel">取消</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- 个人资料编辑弹窗 -->
+<div class="modal-mask" id="profile-modal" hidden>
+  <div class="modal" style="max-width:460px">
+    <h3 style="margin:0 0 6px">编辑个人资料</h3>
+    <p class="meta" style="margin:0 0 12px">昵称、简介选填；头像可上传图片或选择默认样式。</p>
+    <div class="profile-upload-row">
+      <div class="big-avatar" id="pf-preview"></div>
+      <div>
+        <button type="button" class="btn-plain" id="pf-upload-btn">📷 上传图片</button>
+        <input type="file" id="pf-upload-file" accept="image/*" hidden>
+        <div class="profile-meta">建议正方形图片，自动压缩；也可在下方选择默认头像。</div>
+      </div>
+    </div>
+    <label style="font-size:13px;font-weight:600;color:#4b5163">默认头像（按用户名配色）</label>
+    <div class="avatar-picker" id="pf-picker"></div>
+    <label style="font-size:13px;font-weight:600;color:#4b5163">昵称（选填）</label>
+    <input id="pf-display-name" maxlength="40" placeholder="给自己起个昵称">
+    <label style="font-size:13px;font-weight:600;color:#4b5163">个人简介（选填）</label>
+    <textarea id="pf-bio" maxlength="200" rows="3" style="width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:13.5px;resize:vertical" placeholder="一句话介绍自己，不超过 200 字"></textarea>
+    <div class="import-state" id="pf-state"></div>
+    <div class="import-actions" style="justify-content:flex-end;margin-top:14px">
+      <button class="btn-plain" id="pf-cancel">取消</button>
+      <button class="btn-primary" id="pf-save">保存</button>
     </div>
   </div>
 </div>
@@ -701,7 +799,7 @@
 <!-- 账号登录 -->
 <div class="modal-mask" id="auth-modal" hidden>
   <div class="modal auth-box">
-    <div class="auth-brand"><div class="logo">📚</div><h2>进入 SQL 错题本</h2><p>一个账号同步电脑和小程序的错题与复习进度</p></div>
+    <div class="auth-brand"><div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 7h7M9 11h5" stroke-width="1.6"/></svg></div><h2>SQL 错题本</h2><p>一个账号同步电脑和云端的错题与复习进度</p></div>
     <div id="auth-login-view">
       <div id="auth-login-pass">
         <label>账号或邮箱</label><input id="auth-username" autocomplete="username" placeholder="至少 3 个字符">
@@ -748,6 +846,52 @@ window.__QUIZ_DATA__ = [];
 /* ================= 工具 ================= */
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function monthKey(d){return d&&d.length>=7?d.slice(0,7):'';}
+
+/* ================= 头像 ================= */
+/* 12 组好看的渐变配色，供默认头像选用 */
+const AVATAR_THEMES=[
+  ['#667eea','#764ba2'],['#f093fb','#f5576c'],['#4facfe','#00f2fe'],
+  ['#43e97b','#38f9d7'],['#fa709a','#fee140'],['#30cfd0','#330867'],
+  ['#a8edea','#fed6e3'],['#ff9a9e','#fecfef'],['#5ee7df','#b490ca'],
+  ['#2f6fed','#6d28d9'],['#f6d365','#fda085'],['#84fab0','#8fd3f4']
+];
+function hashCode(s){s=String(s||'');let h=0;for(let i=0;i<s.length;i++){h=((h<<5)-h+s.charCodeAt(i))|0;}return Math.abs(h);}
+/* 生成默认头像 SVG data URL：渐变底 + 首字符 */
+function defaultAvatarDataUrl(name,themeIdx){
+  const key=String(name||'?');
+  const idx=(themeIdx==null?hashCode(key):themeIdx)%AVATAR_THEMES.length;
+  const [c1,c2]=AVATAR_THEMES[idx];
+  const ch=(key.trim()[0]||'?').toUpperCase();
+  const svg='<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128">'+
+    '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'+
+    '<stop offset="0" stop-color="'+c1+'"/><stop offset="1" stop-color="'+c2+'"/></linearGradient></defs>'+
+    '<rect width="128" height="128" fill="url(#g)"/>'+
+    '<text x="64" y="64" font-size="56" font-family="Microsoft YaHei,sans-serif" font-weight="700" fill="#fff" text-anchor="middle" dominant-baseline="central">'+ch+'</text></svg>';
+  return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+}
+/* 用户当前应显示的头像：自定义优先，否则默认 */
+function userAvatarSrc(user){
+  if(!user)return defaultAvatarDataUrl('?');
+  if(user.avatar)return user.avatar;
+  return defaultAvatarDataUrl(user.display_name||user.username);
+}
+/* 把头像画进一个 .avatar 元素 */
+function paintAvatar(el,user){
+  if(!el)return;
+  el.innerHTML='';
+  if(user&&user.avatar){
+    const img=document.createElement('img');img.src=user.avatar;img.alt='';el.appendChild(img);
+  }else{
+    el.textContent=((user&&(user.display_name||user.username)||'?').trim()[0]||'?').toUpperCase();
+    const idx=hashCode((user&&(user.display_name||user.username))||'?')%AVATAR_THEMES.length;
+    const [c1,c2]=AVATAR_THEMES[idx];
+    el.style.background='linear-gradient(135deg,'+c1+','+c2+')';
+  }
+}
+function paintAllAvatars(user){
+  paintAvatar(document.getElementById('top-avatar'),user);
+  paintAvatar(document.getElementById('me-avatar'),user);
+}
 
 /* ================= 账号、数据库与同步 ================= */
 let currentUser=null,todayQueue=[],todayStats={due:0,reviewed_today:0},activeCategory='全部';
@@ -819,7 +963,9 @@ async function initAccount(){
 }
 async function enterAccount(user){
   currentUser=user;hideAuth();
-  document.getElementById('user-area').hidden=false;document.getElementById('user-name').textContent=user.username;
+  document.getElementById('user-area').hidden=false;
+  document.getElementById('user-name').textContent=user.display_name||user.username;
+  paintAllAvatars(user);
   document.getElementById('ai-settings-btn').hidden=!user.is_admin;
   if(user.is_admin){document.getElementById('tab-analytics-btn').hidden=false;}
   await loadQuestions();await loadToday();refreshCurrentModel();
@@ -1012,9 +1158,14 @@ function switchTab(name){
 function renderMe(){
   if(!currentUser)return;
   const D=window.__QUIZ_DATA__;
-  document.getElementById('me-username').textContent=currentUser.username;
+  paintAllAvatars(currentUser);
+  document.getElementById('me-username').textContent=currentUser.display_name||currentUser.username;
+  const dnEl=document.getElementById('me-display-name');
+  dnEl.textContent=currentUser.display_name?('账号：'+currentUser.username):'';
   document.getElementById('me-email').textContent=currentUser.email||'未绑定邮箱';
   document.getElementById('me-role').textContent=currentUser.is_admin?'站点管理员':'普通成员';
+  const bioEl=document.getElementById('me-bio');
+  if(currentUser.bio){bioEl.textContent=currentUser.bio;bioEl.classList.add('show');}else{bioEl.classList.remove('show');bioEl.textContent='';}
   document.getElementById('me-total').textContent=D.length;
   document.getElementById('me-mastered').textContent=D.filter(q=>q.status==='已掌握').length;
   document.getElementById('me-due').textContent=todayStats.due;
@@ -1076,6 +1227,99 @@ document.getElementById('my-invite-copy').addEventListener('click',()=>{
     navigator.clipboard.writeText(code).then(()=>{document.getElementById('my-invite-info').textContent='✅ 邀请码 '+code+' 已复制，注册时填入即可。';})
       .catch(()=>{document.getElementById('my-invite-info').textContent='邀请码：'+code+'（请手动复制）';});
   }else document.getElementById('my-invite-info').textContent='邀请码：'+code+'（请手动复制）';
+});
+
+/* ================= 个人资料编辑 ================= */
+let pfPendingAvatar=null; // null=不改；'default'=用默认头像；字符串=自定义 dataURL
+function setPfState(msg){document.getElementById('pf-state').textContent=msg;}
+function paintPfPreview(src){
+  const box=document.getElementById('pf-preview');box.innerHTML='';box.style.background='';
+  const img=document.createElement('img');img.src=src;box.appendChild(img);
+}
+function paintPfPreviewInitial(themeIdx){
+  const box=document.getElementById('pf-preview');box.innerHTML='';
+  const name=currentUser.display_name||currentUser.username||'?';
+  if(themeIdx==null)themeIdx=hashCode(name)%AVATAR_THEMES.length;
+  box.textContent=(name.trim()[0]||'?').toUpperCase();
+  const [c1,c2]=AVATAR_THEMES[themeIdx%AVATAR_THEMES.length];
+  box.style.background='linear-gradient(135deg,'+c1+','+c2+')';
+}
+function openProfileModal(){
+  if(!currentUser)return;
+  pfPendingAvatar=null;
+  document.getElementById('pf-display-name').value=currentUser.display_name||'';
+  document.getElementById('pf-bio').value=currentUser.bio||'';
+  setPfState('');
+  // 预览当前头像
+  if(currentUser.avatar){paintPfPreview(currentUser.avatar);}
+  else{paintPfPreviewInitial();}
+  // 渲染默认头像选择网格
+  const picker=document.getElementById('pf-picker');picker.innerHTML='';
+  const baseName=currentUser.display_name||currentUser.username;
+  AVATAR_THEMES.forEach((pair,i)=>{
+    const opt=document.createElement('div');opt.className='av-opt';
+    opt.style.background='linear-gradient(135deg,'+pair[0]+','+pair[1]+')';
+    opt.textContent=(baseName.trim()[0]||'?').toUpperCase();
+    opt.title='默认头像 '+(i+1);
+    opt.addEventListener('click',()=>{
+      pfPendingAvatar=defaultAvatarDataUrl(baseName,i);
+      picker.querySelectorAll('.av-opt').forEach(x=>x.classList.remove('selected'));
+      opt.classList.add('selected');
+      paintPfPreview(pfPendingAvatar);
+    });
+    picker.appendChild(opt);
+  });
+  document.getElementById('profile-modal').hidden=false;
+}
+function closeProfileModal(){document.getElementById('profile-modal').hidden=true;}
+/* 读取图片并居中裁剪压缩为 256×256 的 JPEG dataURL */
+function processAvatarFile(file){
+  if(!file||!file.type.startsWith('image/')){setPfState('⛔ 请选择图片文件');return;}
+  if(file.size>8*1024*1024){setPfState('⛔ 原图过大，请选择 8MB 以内的图片');return;}
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{
+      const S=256,canvas=document.createElement('canvas');canvas.width=S;canvas.height=S;
+      const ctx=canvas.getContext('2d');
+      const side=Math.min(img.width,img.height);
+      const sx=(img.width-side)/2,sy=(img.height-side)/2;
+      ctx.drawImage(img,sx,sy,side,side,0,0,S,S);
+      let dataUrl=canvas.toDataURL('image/jpeg',0.85);
+      if(dataUrl.length>300000){dataUrl=canvas.toDataURL('image/jpeg',0.7);}
+      pfPendingAvatar=dataUrl;
+      paintPfPreview(dataUrl);
+      document.getElementById('pf-picker').querySelectorAll('.av-opt').forEach(x=>x.classList.remove('selected'));
+      setPfState('✅ 已裁剪为正方形头像，保存后生效');
+    };
+    img.onerror=()=>setPfState('⛔ 图片读取失败，请换一张');
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+document.getElementById('profile-edit-btn').addEventListener('click',openProfileModal);
+document.getElementById('me-avatar').addEventListener('click',openProfileModal);
+document.getElementById('pf-cancel').addEventListener('click',closeProfileModal);
+document.getElementById('profile-modal').addEventListener('click',e=>{if(e.target.id==='profile-modal')closeProfileModal();});
+document.getElementById('pf-upload-btn').addEventListener('click',()=>document.getElementById('pf-upload-file').click());
+document.getElementById('pf-upload-file').addEventListener('change',e=>{processAvatarFile(e.target.files[0]);e.target.value='';});
+document.getElementById('pf-save').addEventListener('click',async()=>{
+  const displayName=document.getElementById('pf-display-name').value.trim();
+  const bio=document.getElementById('pf-bio').value.trim();
+  const payload={display_name:displayName,bio:bio};
+  if(pfPendingAvatar!=null){
+    payload.avatar=pfPendingAvatar; // 选中的默认头像(SVG) 或自定义图片(JPEG)
+  }
+  setPfState('⏳ 正在保存…');
+  try{
+    const r=await fetch('/api/profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok){setPfState('⛔ '+(j.message||'保存失败'));return;}
+    currentUser=Object.assign({},currentUser,j.profile);
+    document.getElementById('user-name').textContent=currentUser.display_name||currentUser.username;
+    paintAllAvatars(currentUser);renderMe();
+    closeProfileModal();
+  }catch(err){setPfState('⛔ 保存失败：本地服务未启动？');}
 });
 async function runImport(fileList){
   const state=document.getElementById('import-state');
