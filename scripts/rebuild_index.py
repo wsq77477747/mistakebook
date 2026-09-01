@@ -25,7 +25,7 @@ TEMPLATE_FILE = os.path.join(ROOT, "assets", "template.html")
 OUT_FILE = os.path.join(ROOT, "index.html")
 
 # ---------- 元信息解析 ----------
-META_KEYS = ["题号", "标题", "知识点", "难度", "日期", "来源", "错误类型",
+META_KEYS = ["题号", "学科", "标题", "知识点", "难度", "日期", "来源", "错误类型",
              "状态", "做错次数", "重错日期", "一句话总结"]
 
 
@@ -75,12 +75,12 @@ def render_table(rows):
         if cells and all(re.fullmatch(r":?-+:?", c) for c in cells):
             continue
         data.append(cells)
-    out = ["<table><thead><tr>"]
+    out = ['<div class="table-scroll" tabindex="0" role="region" aria-label="题目表格，可横向滑动"><table><thead><tr>']
     out += [f"<th>{html_mod.escape(c)}</th>" for c in head]
     out.append("</tr></thead><tbody>")
     for r in data:
         out.append("<tr>" + "".join(f"<td>{html_mod.escape(c)}</td>" for c in r) + "</tr>")
-    out.append("</tbody></table>")
+    out.append("</tbody></table></div>")
     return "\n".join(out)
 
 
@@ -301,6 +301,7 @@ def build():
             redates = [d.strip() for d in re.split(r"[,，;；\s]+", m["重错日期"]) if d.strip()]
             data_list.append({
                 "no": m["题号"],
+                "subject": m["学科"] or "SQL",
                 "title": m["标题"],
                 "cat": key,
                 "diff": diff,
@@ -311,7 +312,7 @@ def build():
                 "times": times,
                 "redates": redates,
                 "summary": m["一句话总结"],
-                "text": " ".join([m["标题"], m["一句话总结"], plain_text(q["body"])]),
+                "text": " ".join([m["学科"], m["标题"], m["一句话总结"], plain_text(q["body"])]),
             })
         main_html.append("</section>")
     main_html = "\n".join(main_html)

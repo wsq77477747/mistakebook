@@ -21,6 +21,13 @@ for (const marker of [
   'aria-label="删除此题"',
   'header{position:static;top:auto;z-index:auto',
   'z-index:130',
+  '.table-scroll{',
+  'id="add-subject"',
+  'id="pv-subject"',
+  'id="list-subject-filter"',
+  "subject_hint:document.getElementById('add-subject').value",
+  'AI 服务暂时不可用',
+  'grid-template-columns:repeat(4,minmax(0,1fr))',
 ]) {
   if (!html.includes(marker)) throw new Error(`voice input marker missing: ${marker}`);
 }

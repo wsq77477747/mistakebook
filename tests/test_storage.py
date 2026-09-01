@@ -226,7 +226,7 @@ class StorageTests(unittest.TestCase):
     def test_import_markdown_content_dedupes_and_parses_frontmatter(self):
         user = storage.register_user("importer", "password123", "importer@example.com")
         md = (
-            "---\n题号: SQL12\n标题: 批量导入的题目\n知识点: JOIN 连接\n难度: 中等\n"
+            "---\n题号: PY12\n学科: Python\n标题: 批量导入的题目\n知识点: 列表推导式\n难度: 中等\n"
             "日期: 2026-08-31\n来源: 牛客\n错误类型: 逻辑错误\n状态: 未掌握\n"
             "做错次数: 2\n重错日期: 2026-08-30, 2026-08-31\n一句话总结: 忘了去重\n---\n"
             "## 题目\nselect * from t;\n"
@@ -235,13 +235,14 @@ class StorageTests(unittest.TestCase):
         self.assertTrue(created)
         question = storage.get_question(user["id"], question_id)
         self.assertEqual(question["title"], "批量导入的题目")
-        self.assertEqual(question["cat"], "JOIN 连接")
+        self.assertEqual(question["subject"], "Python")
+        self.assertEqual(question["cat"], "列表推导式")
         self.assertEqual(question["times"], 2)
         # 相同内容再次导入自动跳过
         _qid, created = storage.import_markdown_content(user["id"], "a.md", md)
         self.assertFalse(created)
         # 同名但内容不同 → 作为新错题导入
-        _qid, created = storage.import_markdown_content(user["id"], "a.md", md.replace("SQL12", "SQL13"))
+        _qid, created = storage.import_markdown_content(user["id"], "a.md", md.replace("PY12", "PY13"))
         self.assertTrue(created)
         # 无 frontmatter 的纯正文也能导入
         _qid, created = storage.import_markdown_content(user["id"], "b.md", "只有正文的一段错题笔记")

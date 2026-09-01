@@ -171,6 +171,7 @@ def init_db():
               user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
               source_file TEXT,
               no TEXT NOT NULL DEFAULT '',
+              subject TEXT NOT NULL DEFAULT 'SQL',
               title TEXT NOT NULL DEFAULT '',
               cat TEXT NOT NULL DEFAULT '未分类',
               diff TEXT NOT NULL DEFAULT '简单',
@@ -407,6 +408,8 @@ def init_db():
             db.execute("ALTER TABLE users ADD COLUMN email_norm TEXT NOT NULL DEFAULT ''")
         # —— 错题本（科目）系统迁移 ——
         question_columns = {row[1] for row in db.execute("PRAGMA table_info(questions)")}
+        if "subject" not in question_columns:
+            db.execute("ALTER TABLE questions ADD COLUMN subject TEXT NOT NULL DEFAULT 'SQL'")
         if "notebook_id" not in question_columns:
             db.execute("ALTER TABLE questions ADD COLUMN notebook_id TEXT")
         for (uid,) in db.execute("SELECT id FROM users").fetchall():
@@ -1034,15 +1037,18 @@ def _question_values(data):
     summary = str(data.get("summary") or "").strip()
     title = str(data.get("title") or "未命名错题").strip()
     cat = str(data.get("cat") or "未分类").strip()
-    no = str(data.get("no") or "SQL???").strip()
+    subject = str(data.get("subject") or "SQL").strip()
+    no = str(data.get("no") or "题目???").strip()
     error_type = str(data.get("errtype") or data.get("error_type") or "其他").strip()
-    search_text = " ".join((no, title, cat, error_type, summary, re.sub(r"\s+", " ", body_md)))
+    search_text = " ".join((subject, no, title, cat, error_type, summary,
+                            re.sub(r"\s+", " ", body_md)))
     try:
         wrong_times = max(1, int(data.get("times") or data.get("wrong_times") or 1))
     except (TypeError, ValueError):
         wrong_times = 1
     return {
         "no": no,
+        "subject": subject,
         "title": title,
         "cat": cat,
         "diff": str(data.get("diff") or "简单").strip(),
@@ -1117,11 +1123,11 @@ def create_question(user_id, data, source_file=None, question_id=None, notebook_
         nb_row, owner_id = _resolve_writable_notebook(db, user_id, notebook_id or data.get("notebook_id"))
         db.execute(
             """INSERT INTO questions(
-              id,user_id,source_file,no,title,cat,diff,first_wrong_date,source,error_type,status,
+              id,user_id,source_file,no,subject,title,cat,diff,first_wrong_date,source,error_type,status,
               wrong_times,rewrong_dates,summary,body_md,search_text,next_review_at,notebook_id,created_at,updated_at
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
-                question_id, owner_id, source_file, values["no"], values["title"], values["cat"],
+                question_id, owner_id, source_file, values["no"], values["subject"], values["title"], values["cat"],
                 values["diff"], values["first_wrong_date"], values["source"], values["error_type"],
                 values["status"], values["wrong_times"], values["rewrong_dates"], values["summary"],
                 values["body_md"], values["search_text"], values["next_review_at"], nb_row["id"], now, now,
@@ -1140,11 +1146,11 @@ def update_question(user_id, question_id, data, expected_version=None):
             raise RuntimeError("VERSION_CONFLICT")
         version = current["version"] + 1
         db.execute(
-            """UPDATE questions SET no=?,title=?,cat=?,diff=?,first_wrong_date=?,source=?,error_type=?,status=?,
+            """UPDATE questions SET no=?,subject=?,title=?,cat=?,diff=?,first_wrong_date=?,source=?,error_type=?,status=?,
               wrong_times=?,rewrong_dates=?,summary=?,body_md=?,search_text=?,next_review_at=?,version=?,updated_at=?
               WHERE id=?""",
             (
-                values["no"], values["title"], values["cat"], values["diff"], values["first_wrong_date"],
+                values["no"], values["subject"], values["title"], values["cat"], values["diff"], values["first_wrong_date"],
                 values["source"], values["error_type"], values["status"], values["wrong_times"],
                 values["rewrong_dates"], values["summary"], values["body_md"], values["search_text"],
                 values["next_review_at"], version, now, question_id,
@@ -1192,6 +1198,7 @@ def _row_to_question(row, include_body=True):
         "id": row["id"],
         "file": row["id"],
         "no": row["no"],
+        "subject": row["subject"] if "subject" in row.keys() else "SQL",
         "title": row["title"],
         "cat": row["cat"],
         "diff": row["diff"],
@@ -1752,7 +1759,8 @@ def sync_push(user_id, records):
 def _meta_to_data(meta, body):
     """frontmatter 元数据 + 正文 → create_question 所需的 data 字典。"""
     return {
-        "no": meta.get("题号"), "title": meta.get("标题"), "cat": meta.get("知识点"),
+        "no": meta.get("题号"), "subject": meta.get("学科") or "SQL",
+        "title": meta.get("标题"), "cat": meta.get("知识点"),
         "diff": meta.get("难度"), "date": meta.get("日期"), "src": meta.get("来源"),
         "errtype": meta.get("错误类型"), "status": meta.get("状态"),
         "times": meta.get("做错次数"), "redates": meta.get("重错日期"),

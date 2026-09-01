@@ -3,6 +3,7 @@ import datetime as dt
 import hashlib
 import http.cookiejar
 import http.server
+import io
 import json
 import os
 import sqlite3
@@ -142,6 +143,7 @@ class ServerApiTests(unittest.TestCase):
         self.assertGreaterEqual(len(listing["questions"]), 1)
         question = listing["questions"][0]
         self.assertIn("prompt_html", question)
+        self.assertEqual(question["subject"], "SQL")
         _, today = self.request("/api/review/today")
         self.assertGreaterEqual(today["stats"]["due"], 1)
         _, reviewed = self.request(
@@ -172,7 +174,7 @@ class ServerApiTests(unittest.TestCase):
         )
         server.storage.create_question(user["id"], {
             "no": "PROMPT-1", "title": "变体标题题干", "cat": "测试",
-            "body_md": "## 题目（题目描述，如有表格可保留）\n变体题干内容。\n\n## 正确写法\n正确答案。",
+            "body_md": "## 题目（题目描述，如有表格可保留）\n变体题干内容。\n\n| 长字段一 | 长字段二 |\n|---|---|\n| A | B |\n\n## 正确写法\n正确答案。",
         })
         server.storage.create_question(user["id"], {
             "no": "PROMPT-2", "title": "纯文本题干", "cat": "测试",
@@ -185,6 +187,7 @@ class ServerApiTests(unittest.TestCase):
         _, listing = self.request("/api/questions")
         questions = {q["no"]: q for q in listing["questions"]}
         self.assertIn("变体题干内容", questions["PROMPT-1"]["prompt_html"])
+        self.assertIn('class="table-scroll"', questions["PROMPT-1"]["prompt_html"])
         self.assertNotIn("正确答案", questions["PROMPT-1"]["prompt_html"])
         self.assertIn("没有二级标题的纯文本题干", questions["PROMPT-2"]["prompt_html"])
 
@@ -193,6 +196,71 @@ class ServerApiTests(unittest.TestCase):
         status, cfg = self.request("/api/auth/register_config", client=anonymous)
         self.assertEqual(status, 200)
         self.assertIn("email_code_required", cfg)
+
+    def test_classify_supports_subject_auto_detection(self):
+        server.storage.register_user("subject-user", "password123", "subject-user@example.com")
+        status, _ = self.request(
+            "/api/auth/login", {"username": "subject-user", "password": "password123"}
+        )
+        self.assertEqual(status, 200)
+        original_call, original_config = server._call_llm, server.load_config
+        captured = {}
+        try:
+            def fake_call(_cfg, messages, **kwargs):
+                captured["prompt"] = messages[0]["content"]
+                captured["kwargs"] = kwargs
+                return json.dumps({
+                    "subject": "Python", "no": "PY1", "title": "列表推导式",
+                    "cat": "列表推导式", "diff": "简单", "date": "2026-09-02",
+                    "src": "练习", "errtype": "逻辑错误", "status": "未掌握",
+                    "times": 1, "redates": ["2026-09-02"], "summary": "条件写反",
+                    "body_md": "## 题目\n生成偶数列表。\n\n## 正确答案\n```python\n[x for x in xs if x % 2 == 0]\n```",
+                }, ensure_ascii=False)
+
+            server._call_llm = fake_call
+            server.load_config = lambda: {
+                "base_url": "https://ci.example/v1", "api_key": "sk-ci", "model": "ci-model"
+            }
+            status, result = self.request("/api/classify", {
+                "raw": "Python 列表推导式题", "categories": ["JOIN 连接", "列表推导式"],
+                "today": "2026-09-02", "subject_hint": "自动识别",
+            })
+            self.assertEqual(status, 200)
+            self.assertEqual(result["result"]["subject"], "Python")
+            self.assertIn("SQL、Python、C/C++、数学、英语", captured["prompt"])
+            self.assertEqual(captured["kwargs"]["retries"], 2)
+            self.assertEqual(captured["kwargs"]["timeout"], 85)
+        finally:
+            server._call_llm, server.load_config = original_call, original_config
+
+    def test_classify_returns_structured_temporary_error_for_upstream_502(self):
+        server.storage.register_user("upstream-user", "password123", "upstream-user@example.com")
+        status, _ = self.request(
+            "/api/auth/login", {"username": "upstream-user", "password": "password123"}
+        )
+        self.assertEqual(status, 200)
+        original_call, original_config = server._call_llm, server.load_config
+        try:
+            def fail_call(*_args, **_kwargs):
+                raise urllib.error.HTTPError(
+                    "https://ci.example/v1/chat/completions", 502, "Bad Gateway", {},
+                    io.BytesIO(b"temporary upstream failure"),
+                )
+
+            server._call_llm = fail_call
+            server.load_config = lambda: {
+                "base_url": "https://ci.example/v1", "api_key": "sk-ci", "model": "ci-model"
+            }
+            status, result = self.request("/api/classify", {
+                "raw": "一道 Python 错题", "categories": [], "today": "2026-09-02",
+                "subject_hint": "Python",
+            })
+            self.assertEqual(status, 503)
+            self.assertEqual(result["error"], "LLM_TEMPORARY_ERROR")
+            self.assertEqual(result["upstream_status"], 502)
+            self.assertTrue(result["retryable"])
+        finally:
+            server._call_llm, server.load_config = original_call, original_config
 
     def test_import_batch_endpoint(self):
         anonymous = urllib.request.build_opener()

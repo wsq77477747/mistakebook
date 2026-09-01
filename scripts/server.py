@@ -41,25 +41,49 @@ PORT = int(os.environ.get("PORT", "8765"))
 HOST = os.environ.get("HOST", "127.0.0.1")
 DEFAULT_BASE = "https://ark.cn-beijing.volces.com/api/v3"
 
-CLS_SYSTEM_PROMPT = """你是 SQL 错题归档助手。用户会粘贴一道错题的原始信息（题目描述、他写的 SQL、报错信息、讲解等），也可能附带错题截图。
-如果附带截图：请仔细识别图片中的题目描述、数据表、SQL 代码和报错内容，把它们原样转写到对应小节，不要遗漏表头和条件。
+SUBJECTS = ("SQL", "Python", "C/C++", "数学", "英语", "其他")
+
+
+def _normalize_subject(value, fallback="其他"):
+    text = str(value or "").strip()
+    aliases = {
+        "sql": "SQL", "mysql": "SQL", "数据库": "SQL",
+        "python": "Python", "py": "Python",
+        "c": "C/C++", "c++": "C/C++", "cpp": "C/C++", "c/c++": "C/C++",
+        "数学": "数学", "math": "数学", "英语": "英语", "english": "英语",
+    }
+    normalized = aliases.get(text.casefold(), text)
+    return normalized if normalized in SUBJECTS else fallback
+
+
+def _default_question_no(subject):
+    return {
+        "SQL": "SQL???", "Python": "PY???", "C/C++": "C???",
+        "数学": "MATH???", "英语": "ENG???",
+    }.get(subject, "题目???")
+
+
+CLS_SYSTEM_PROMPT = """你是通用错题归档助手。用户会粘贴或上传一道错题，内容可能属于 SQL、Python、C/C++、数学、英语或其他学科。
+学科提示：{subject_hint}。提示为“自动识别”时，请根据题目内容判断；提示为具体学科时优先采用该学科。
+如果附带截图：请仔细识别题目描述、表格、代码、公式、选项、用户答案和报错内容，原样转写关键信息，不要遗漏表头、条件或单位。
 请把信息整理成结构化的归档结果。只输出一个 JSON 对象，不要输出任何其他文字或 markdown 代码块包裹。
 字段要求：
-- no: 题号，如 SQL9；无法确定就填 SQL???
+- subject: 学科，只能是 SQL / Python / C/C++ / 数学 / 英语 / 其他 之一
+- no: 题号；保留原题号，无法确定时按学科填写 SQL??? / PY??? / C??? / MATH??? / ENG??? / 题目???
 - title: 一句话标题，简洁，如「查找除复旦大学的用户信息」
-- cat: 知识点分类。必须【优先】从给定的候选分类里选最贴切的一个；只有所有候选都不合适时，才允许新起一个简短分类名（如 WHERE 条件过滤 / JOIN 连接 / 窗口函数）
+- cat: 知识点分类。必须优先从同学科的候选分类里选最贴切的一个；都不合适时新建简短分类（如 JOIN 连接 / 列表推导式 / 指针 / 二次函数 / 时态）
 - diff: 难度，只能是 简单 / 中等 / 困难 之一
 - date: 做错日期，直接用给定的 today
-- src: 题目来源，如 牛客 / LeetCode / 力扣 / 面试
-- errtype: 错误类型，只能是 语法错误 / 逻辑错误 / 函数用法 / NULL陷阱 / 其他 之一
+- src: 题目来源，如 牛客 / LeetCode / 学校作业 / 试卷 / 面试
+- errtype: 错误类型，只能是 语法错误 / 逻辑错误 / 概念理解 / 计算错误 / 记忆错误 / 审题错误 / 表达错误 / 其他 之一
 - status: 复习状态，只能是 未掌握 / 复习中 / 已掌握 之一，默认 未掌握
 - times: 做错次数，默认 1
 - redates: 历次做错日期数组，默认 [date]
 - summary: 一句话错因，≤50 字，点出关键错误原因
-- body_md: 用 Markdown 写正文，必须用 ## 分 5 个小节：
+- body_md: 用 Markdown 写正文，必须用 ## 分 5 个通用小节：
     ## 题目（题目描述，如有多行数据可写 Markdown 表格）
-    ## 我的错误写法（```sql 代码块，附报错信息）
-    ## 正确写法（```sql 代码块）
+    ## 我的错误答案（编程题用对应语言代码块；其他题型写答案或过程）
+    ## 正确答案（编程题用对应语言代码块；数学题保留推导步骤；英语题保留原文与解析）
     ## 错因分析（要点式，讲清楚为什么错、怎么改）
     ## 知识点总结（可复用要点/易错点）
 
@@ -233,7 +257,8 @@ def _decode_data_url(s):
         return None, None
 
 
-def _call_llm(cfg, messages, temperature=0.3, retries=3, base_delay=2.0, max_tokens=None, json_mode=False):
+def _call_llm(cfg, messages, temperature=0.3, retries=3, base_delay=2.0,
+              max_tokens=None, json_mode=False, timeout=180):
     """转发对话给 OpenAI 兼容 LLM，返回 content 字符串。cfg 为实际使用的配置
     （站点默认或用户自有）。遇到 429（访问量过大/限流）或 5xx 时按退避自动重试，最多 retries 次。"""
     url = _llm_endpoint(cfg)
@@ -254,7 +279,7 @@ def _call_llm(cfg, messages, temperature=0.3, retries=3, base_delay=2.0, max_tok
     for attempt in range(retries):
         req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
         try:
-            with urllib.request.urlopen(req, timeout=180) as r:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
                 resp = json.loads(r.read().decode("utf-8"))
             return resp["choices"][0]["message"]["content"]
         except urllib.error.HTTPError as e:
@@ -1377,10 +1402,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not raw and not image:
             return self._send_json(400, {"error": "EMPTY_RAW", "message": "请先粘贴错题内容或上传截图。"})
         categories = body.get("categories") or []
+        subject_hint_raw = (body.get("subject_hint") or "自动识别").strip()
+        subject_hint = (_normalize_subject(subject_hint_raw)
+                        if subject_hint_raw != "自动识别" else "自动识别")
         today = (body.get("today") or "").strip()
         image = (body.get("image") or "").strip()   # 可选：错题截图 data URL
         prompt = CLS_SYSTEM_PROMPT.format(
             categories=json.dumps(categories, ensure_ascii=False),
+            subject_hint=subject_hint,
             today=today or "未知")
         try:
             if image:
@@ -1393,10 +1422,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             content = _call_llm(cfg, [
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": user_content},
-            ], temperature=0.2, max_tokens=6000)
+            ], temperature=0.2, max_tokens=6000, retries=2, base_delay=1.5, timeout=85)
             result = _extract_json(content)
             # 字段兜底
-            result.setdefault("no", "SQL???")
+            fallback_subject = subject_hint if subject_hint != "自动识别" else "其他"
+            result["subject"] = _normalize_subject(result.get("subject"), fallback_subject)
+            result.setdefault("no", _default_question_no(result["subject"]))
             result.setdefault("title", "未命名错题")
             result.setdefault("cat", "未分类")
             result.setdefault("diff", "简单")
@@ -1408,11 +1439,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             result.setdefault("redates", [result.get("date")] if result.get("date") else [])
             result.setdefault("summary", "")
             result.setdefault("body_md", "")
-            self._track_event("ai_classify", metadata={"has_image": bool(image), "cat": result.get("cat", "")[:30], "own_config": own})
+            self._track_event("ai_classify", metadata={"has_image": bool(image),
+                              "subject": result["subject"], "cat": result.get("cat", "")[:30],
+                              "own_config": own})
             self._send_json(200, {"result": result})
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", "replace")[:500]
-            self._send_json(e.code, {"error": "LLM_API_ERROR", "message": f"LLM 返回 {e.code}: {detail}"})
+            retryable = e.code in (429, 500, 502, 503, 504)
+            message = (f"上游 AI 服务暂时不可用（{e.code}），已自动重试，请稍后再试。"
+                       if retryable else f"上游 AI 返回 {e.code}: {detail}")
+            self._send_json(503 if retryable else e.code, {
+                "error": "LLM_TEMPORARY_ERROR" if retryable else "LLM_API_ERROR",
+                "message": message, "upstream_status": e.code, "retryable": retryable,
+            })
         except Exception as e:
             self._send_json(500, {"error": "PARSE_ERROR", "message": f"AI 整理失败: {e}"})
 
@@ -1426,7 +1465,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not question:
             return self._send_json(404, {"error": "NOT_FOUND", "message": "文件不存在。"})
         meta = {
-            "题号": question["no"], "标题": question["title"], "知识点": question["cat"],
+            "题号": question["no"], "学科": question.get("subject", "SQL"),
+            "标题": question["title"], "知识点": question["cat"],
             "难度": question["diff"], "日期": question["date"], "来源": question["src"],
             "错误类型": question["errtype"], "状态": question["status"],
             "做错次数": str(question["times"]), "重错日期": ", ".join(question["redates"]),
@@ -1454,7 +1494,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not current:
             return self._send_json(404, {"error": "NOT_FOUND", "message": "文件不存在。"})
         data = {
-            "no": meta.get("题号"), "title": meta.get("标题"), "cat": meta.get("知识点"),
+            "no": meta.get("题号"), "subject": meta.get("学科"),
+            "title": meta.get("标题"), "cat": meta.get("知识点"),
             "diff": meta.get("难度"), "date": meta.get("日期"), "src": meta.get("来源"),
             "errtype": meta.get("错误类型"), "status": meta.get("状态"),
             "times": meta.get("做错次数"), "redates": meta.get("重错日期"),
@@ -1491,7 +1532,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._send_json(400, {"error": "EMPTY_BODY", "message": "当前错题正文为空。"})
         # 构造当前错题的文本表示
         meta_lines = []
-        for k in ["题号","标题","知识点","难度","日期","来源","错误类型","状态","做错次数","一句话总结"]:
+        for k in ["题号","学科","标题","知识点","难度","日期","来源","错误类型","状态","做错次数","一句话总结"]:
             v = str(meta.get(k, "") or "").strip()
             if v:
                 meta_lines.append(f"{k}: {v}")
@@ -1504,7 +1545,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 修正指令：{instruction}"""
 
-        system_msg = """你是SQL错题修正助手。用户会给你一道已整理的错题（含元信息和Markdown正文），以及一条修正指令。
+        system_msg = """你是通用错题修正助手。用户会给你一道已整理的错题（可能属于编程、数学、英语或其他学科），以及一条修正指令。
 请严格按照指令修正错题内容，保持原有格式不变。
 只输出JSON，不要任何解释文字。
 
@@ -1512,10 +1553,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 {
   "reply": "用一句话简要说明你做了哪些修改",
   "meta": {
-    "题号": "", "标题": "", "知识点": "", "难度": "", "日期": "",
+    "题号": "", "学科": "", "标题": "", "知识点": "", "难度": "", "日期": "",
     "来源": "", "错误类型": "", "状态": "", "做错次数": "", "重错日期": "", "一句话总结": ""
   },
-  "body_md": "修正后的Markdown正文，必须包含 ## 题目 / ## 我的错误写法 / ## 正确写法 / ## 错因分析 / ## 知识点总结 五个小节"
+  "body_md": "修正后的Markdown正文，包含 ## 题目 / ## 我的错误答案 / ## 正确答案 / ## 错因分析 / ## 知识点总结 五个小节"
 }"""
 
         # 构造多轮消息
@@ -1536,7 +1577,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if not new_body:
                 return self._send_json(500, {"error": "EMPTY_RESULT", "message": "AI返回的正文为空。"})
             # 保留未修改的字段
-            for k in ["题号","标题","知识点","难度","日期","来源","错误类型","状态","做错次数","重错日期","一句话总结"]:
+            for k in ["题号","学科","标题","知识点","难度","日期","来源","错误类型","状态","做错次数","重错日期","一句话总结"]:
                 if not str(new_meta.get(k, "") or "").strip():
                     new_meta[k] = str(meta.get(k, "") or "")
             self._track_event("ai_revise", metadata={"question_id": str(body.get("file") or body.get("id") or "")[:36], "own_config": own})
@@ -1597,7 +1638,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     # ---- 确认入库（写入 md + 重建） ----
     def _save_question(self):
         b = self._read_body()
-        no = _safe_name(b.get("no") or "SQL???", 20)
+        subject = _normalize_subject(b.get("subject"), "其他")
+        no = _safe_name(b.get("no") or _default_question_no(subject), 20)
         title = _safe_name(b.get("title") or "未命名错题", 50)
         cat = _safe_name(b.get("cat") or "未分类", 30)
         date = _safe_name(b.get("date") or "", 10)
@@ -1625,6 +1667,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         front = (
             f"---\n"
             f"题号: {no}\n"
+            f"学科: {subject}\n"
             f"标题: {title}\n"
             f"知识点: {cat}\n"
             f"难度: {_safe_name(b.get('diff') or '简单', 10)}\n"
@@ -1651,7 +1694,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             image_rel = os.path.relpath(img_path, ROOT)
 
         record = dict(b)
-        record.update({"no": no, "title": title, "cat": cat, "date": date,
+        record.update({"no": no, "subject": subject, "title": title, "cat": cat, "date": date,
                        "times": times, "redates": redates, "body_md": body_md})
         try:
             question_id = storage.create_question(
@@ -1673,7 +1716,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self._send_json(200, {"ok": True, "path": os.path.relpath(path, ROOT),
                               "image": image_rel, "level": add_level,
                               "id": question_id,
-                              "no": no, "title": title, "cat": cat})
+                              "no": no, "subject": subject, "title": title, "cat": cat})
 
 
 def main():
