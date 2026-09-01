@@ -41,10 +41,11 @@
   .cat h2 .cnt-badge{background:var(--brand);color:#fff;font-size:12px;padding:2px 10px;border-radius:20px;}
   .qcard{background:var(--card);border:1px solid var(--line);border-radius:12px;
          padding:16px 18px;margin-bottom:14px;box-shadow:0 1px 2px rgba(20,30,60,.04);}
-  .qhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .qhead{display:flex;align-items:flex-start;gap:10px;}
   .badge{background:var(--brand-soft);color:var(--brand);font-weight:700;font-size:13px;
          padding:3px 10px;border-radius:6px;}
-  .qhead h3{margin:0;font-size:16px;flex:1;}
+  .qhead h3{margin:2px 0 0;font-size:16px;flex:1;min-width:0;overflow-wrap:anywhere;line-height:1.5;}
+  .qmeta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:10px;}
   .meta{color:var(--muted);font-size:12.5px;}
   .chip{display:inline-block;font-size:12px;padding:2px 9px;border-radius:20px;margin-left:6px;}
   .chip.diff-简单{background:#e8f7ee;color:var(--ok);}
@@ -52,8 +53,14 @@
   .chip.diff-困难{background:#fdeaea;color:var(--err);}
   .chip.type{background:#f0f1f6;color:#4b5163;}
   .chip.status{background:#eef2ff;color:#4f46e5;}
-  .qdel{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 6px;border-radius:6px;opacity:0.55;transition:all .15s;margin-left:auto;}
-  .qdel:hover{opacity:1;background:#fdecec;color:#c0392b;}
+  .qcard-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+  .qcard-actions button{width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;
+                        padding:0;border:1px solid var(--line);border-radius:9px;background:#fff;color:#64748b;
+                        cursor:pointer;transition:background .15s,border-color .15s,color .15s,transform .15s;}
+  .qcard-actions button:hover{transform:translateY(-1px);}
+  .qcard-actions svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;}
+  .qedit:hover{background:#eef4ff;border-color:#bfdbfe;color:var(--brand);}
+  .qdel:hover{background:#fff1f2;border-color:#fecdd3;color:#e11d48;}
   .status-clickable{cursor:pointer;transition:all .15s;}
   .status-clickable:hover{outline:2px solid var(--brand);outline-offset:1px;}
   .summary{margin-top:10px;font-size:13.5px;color:#5b6272;background:#f8f9fc;
@@ -127,7 +134,7 @@
   /* ---------- AI 浮窗 ---------- */
   #ai-fab{position:fixed;right:22px;bottom:22px;width:58px;height:58px;border-radius:50%;
           background:linear-gradient(135deg,#2f6fed,#6d28d9);color:#fff;border:none;
-          cursor:pointer;box-shadow:0 6px 22px rgba(70,60,220,.4);z-index:50;
+          cursor:pointer;box-shadow:0 6px 22px rgba(70,60,220,.4);z-index:129;
           display:flex;align-items:center;justify-content:center;transition:transform .2s}
   #ai-fab svg{width:30px;height:30px}
   #ai-fab:hover{transform:scale(1.08) rotate(-4deg)}
@@ -140,7 +147,7 @@
   .ai-head-icon svg{width:16px;height:16px}
   #ai-panel{position:fixed;right:22px;bottom:90px;width:390px;height:560px;max-height:80vh;background:var(--card);
             border:1px solid var(--line);border-radius:16px;box-shadow:0 12px 40px rgba(20,30,60,.25);
-            display:flex;flex-direction:column;z-index:51;overflow:hidden;}
+            display:flex;flex-direction:column;z-index:130;overflow:hidden;}
   #ai-panel[hidden]{display:none;}
   .ai-head{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line);
            background:linear-gradient(135deg,#eaf1ff,#f3e8ff);font-weight:700;font-size:14.5px;}
@@ -209,6 +216,7 @@
   .modal-mask{position:fixed;inset:0;background:rgba(15,20,32,.45);display:flex;align-items:center;
               justify-content:center;z-index:60;}
   .modal-mask[hidden]{display:none;}
+  #ai-modal{z-index:160;}
   .modal{background:var(--card);border-radius:16px;padding:22px;width:440px;max-width:92vw;max-height:calc(100vh - 40px);overflow-y:auto;}
   .modal h3{margin:0 0 16px;font-size:16px;}
   .modal label{display:block;font-size:13px;color:#4b5163;margin:10px 0 4px;}
@@ -265,6 +273,8 @@
   .review-actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
   .review-actions button{border:0;border-radius:10px;padding:11px 18px;font-weight:700;cursor:pointer}
   #review-reveal{background:var(--brand);color:#fff;min-width:150px}
+  #review-skip{background:#fff;color:#64748b;border:1px solid var(--line)}
+  #review-skip:hover{background:#f8fafc;color:var(--brand)}
   .rating-btn{flex:1;min-width:110px;background:#f0f2f7;color:#374151}
   .rating-btn[data-rating="0"]{background:#fee2e2;color:#b91c1c}
   .rating-btn[data-rating="1"]{background:#ffedd5;color:#c2410c}
@@ -457,16 +467,16 @@
     .me-card{padding:20px}.me-stats{width:100%;margin-left:0}.me-stats .review-kpi{flex:1}
   }
   @media (max-width:600px){
-    body{padding-bottom:0}header{position:sticky;top:0;z-index:70;padding:10px 12px 8px}.hrow{gap:6px 10px}
+    body{padding-bottom:0}header{position:static;top:auto;z-index:auto;padding:10px 12px 8px}.hrow{gap:6px 10px}
     header h1{font-size:19px}.stats{width:100%;order:3}.user-chip{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .tabbar{position:static;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;margin:8px 0 0;padding:7px 0 0;border-top:1px solid var(--line);overflow:visible}
     .tab{min-width:0;width:100%;padding:8px 3px;font-size:11.5px;line-height:1.2;white-space:nowrap}.review-shell,.panel,main{padding:16px}
     .review-hero{align-items:flex-start}.review-hero h2{font-size:23px}.review-kpi{min-width:92px;padding:10px 12px}.review-kpi strong{font-size:24px}
-    .review-card{padding:17px;border-radius:15px}.review-card-head h3{font-size:18px;min-width:100%}.qcard{padding:14px}.qhead h3{min-width:calc(100% - 52px)}
-    .qhead .meta{width:100%;display:flex;gap:5px;align-items:center;flex-wrap:wrap}.chip{margin-left:0}
+    .review-card{padding:17px;border-radius:15px}.review-card-head h3{font-size:18px;min-width:100%}.qcard{padding:14px}.qhead h3{font-size:15px}
+    .qmeta{gap:5px}.chip{margin-left:0}.qcard-actions button{width:34px;height:34px}
     .cards{grid-template-columns:1fr 1fr;gap:9px}.chart-grid{grid-template-columns:minmax(0,1fr)}.chart-box{padding:13px 10px;overflow:hidden}
     .search-box{display:grid;grid-template-columns:1fr auto}.search-box button{padding:10px 15px}
-    #ai-fab{right:16px;bottom:16px;width:50px;height:50px}.ai-panel,#ai-panel{left:10px;right:10px;bottom:74px;width:auto;height:calc(100dvh - 96px);max-height:none}
+    #ai-fab{right:16px;bottom:16px;width:50px;height:50px}.ai-panel,#ai-panel{left:10px;right:10px;top:max(10px,env(safe-area-inset-top));bottom:74px;width:auto;height:auto;max-height:none;z-index:130}
     .add-grid,.edit-row{grid-template-columns:1fr}.modal{padding:18px;max-height:calc(100dvh - 24px)}.auth-actions{grid-template-columns:1fr}
     #auth-modal{z-index:120;align-items:flex-start;overflow-y:auto;padding:12px max(12px,env(safe-area-inset-right)) 12px max(12px,env(safe-area-inset-left))}
     #auth-modal .auth-box{width:min(430px,100%);max-width:100%;max-height:none;margin:auto;overflow:visible}
@@ -505,9 +515,6 @@
 .status-dd-item{padding:8px 16px;cursor:pointer;font-size:13px;transition:background .15s}
 .status-dd-item:hover{background:#f0f4ff}
 .status-dd-item.active{background:#e8efff;color:#4f46e5;font-weight:600}
-/* 编辑按钮 */
-.qedit{background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px;border-radius:4px;opacity:.6;transition:all .15s}
-.qedit:hover{opacity:1;background:#f0f4ff}
 /* 编辑模态框 */
 #edit-modal{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px}
 #edit-modal[hidden]{display:none}
@@ -604,10 +611,11 @@
     <div class="review-answer" id="review-answer" hidden></div>
     <div class="review-actions">
       <button id="review-reveal">查看答案</button>
-      <button class="rating-btn" data-rating="0" hidden>忘记 · 1天</button>
-      <button class="rating-btn" data-rating="1" hidden>模糊 · 稍后</button>
+      <button class="rating-btn" data-rating="0" hidden>忘记 · 明天</button>
+      <button class="rating-btn" data-rating="1" hidden>模糊 · 缩短间隔</button>
       <button class="rating-btn" data-rating="2" hidden>掌握 · 正常</button>
       <button class="rating-btn" data-rating="3" hidden>轻松 · 延长</button>
+      <button id="review-skip">下一题（暂不评价）</button>
     </div>
   </article>
   <section class="review-history"><h3>最近复习记录</h3><div id="review-history"><span class="meta">暂无复习记录</span></div></section>
@@ -1498,8 +1506,10 @@ function renderLibrary(){
   const visibleCats=activeCategory==='全部'?cats:cats.filter(c=>c===activeCategory);
   document.getElementById('question-list').innerHTML=visibleCats.length?visibleCats.map(c=>
     '<section class="cat" id="cat-'+encodeURIComponent(c)+'"><h2>'+esc(c)+' <span class="cnt-badge">'+groups[c].length+' 题</span></h2>'+groups[c].map(q=>
-      '<article class="qcard" id="q-'+q.id+'" data-file="'+q.id+'"><div class="qhead"><span class="badge">'+esc(q.no)+'</span><h3>'+esc(q.title)+'</h3><span class="meta">'+
-      '<span class="chip diff-'+esc(q.diff)+'">'+esc(q.diff)+'</span><span class="chip type">'+esc(q.errtype)+'</span><span class="chip status status-clickable" data-file="'+q.id+'" data-status="'+esc(q.status)+'" title="点击更新掌握状态">'+esc(q.status)+'</span><span class="chip">'+esc(q.date)+'</span><span class="chip">'+esc(q.src)+'</span><button class="qedit" data-file="'+q.id+'" title="编辑此题">✏️</button><button class="qdel" data-file="'+q.id+'" title="删除此题">🗑</button></span></div>'+
+      '<article class="qcard" id="q-'+q.id+'" data-file="'+q.id+'"><div class="qhead"><span class="badge">'+esc(q.no)+'</span><h3>'+esc(q.title)+'</h3><div class="qcard-actions">'+
+      '<button class="qedit" data-file="'+q.id+'" title="编辑此题" aria-label="编辑此题"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button>'+
+      '<button class="qdel" data-file="'+q.id+'" title="删除此题" aria-label="删除此题"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg></button></div></div><div class="qmeta">'+
+      '<span class="chip diff-'+esc(q.diff)+'">'+esc(q.diff)+'</span><span class="chip type">'+esc(q.errtype)+'</span><span class="chip status status-clickable" data-file="'+q.id+'" data-status="'+esc(q.status)+'" title="点击更新掌握状态">'+esc(q.status)+'</span><span class="chip">'+esc(q.date)+'</span><span class="chip">'+esc(q.src)+'</span></div>'+
       (q.summary?'<div class="summary">💡 一句话错因：'+esc(q.summary)+'</div>':'')+'<details><summary>查看题目 / 错因 / 解析详情</summary>'+q.body_html+'</details></article>'
     ).join('')+'</section>').join(''):'<div class="empty-library">还没有错题。点击右下角 AI 助手录入第一道题。</div>';
 }
@@ -1546,11 +1556,24 @@ async function loadToday(){
 document.getElementById('review-reveal').addEventListener('click',()=>{
   document.getElementById('review-answer').hidden=false;document.getElementById('review-reveal').hidden=true;setRatingVisible(true);
 });
+document.getElementById('review-skip').addEventListener('click',()=>{
+  if(!todayQueue.length)return;
+  if(todayQueue.length===1){
+    document.getElementById('review-subtitle').textContent='当前只剩这一道待复习题；暂不评价不会改变它的复习计划。';
+    return;
+  }
+  const skipped=todayQueue.shift();todayQueue.push(skipped);renderReview();
+  document.getElementById('review-subtitle').textContent='已暂时跳过 '+skipped.no+'，未记录掌握情况。';
+});
 document.querySelectorAll('.rating-btn').forEach(btn=>btn.addEventListener('click',async()=>{
   if(!todayQueue.length)return;document.querySelectorAll('.rating-btn').forEach(b=>b.disabled=true);
   try{
-    const rl=await apiJson('/api/review',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question_id:todayQueue[0].id,rating:Number(btn.dataset.rating),device_id:deviceId()})});
+    const reviewed=todayQueue[0],rating=Number(btn.dataset.rating);
+    const rl=await apiJson('/api/review',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question_id:reviewed.id,rating:rating,device_id:deviceId()})});
     todayQueue.shift();todayStats.due=Math.max(0,todayStats.due-1);todayStats.reviewed_today+=1;renderReview();loadQuestions();loadReviewHistory();
+    const labels=['忘记','模糊','掌握','轻松'];
+    const nextDue=(rl.schedule&&rl.schedule.next_review_at)||rl.next_review_at||'按计划安排';
+    document.getElementById('review-subtitle').textContent=reviewed.no+' 已记录为“'+labels[rating]+'”，下次复习：'+nextDue+'。';
     if(rl&&rl.level)handleLevelResult(rl.level);
   }catch(e){alert('保存复习记录失败：'+e.message);}
   finally{document.querySelectorAll('.rating-btn').forEach(b=>b.disabled=false);}

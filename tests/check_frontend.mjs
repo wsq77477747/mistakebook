@@ -12,6 +12,15 @@ for (const marker of [
   'window.SpeechRecognition||window.webkitSpeechRecognition',
   "voiceRecognition.lang='zh-CN'",
   "voiceRecognition.interimResults=true",
+  'id="review-skip"',
+  "未记录掌握情况",
+  "下次复习：",
+  "rl.schedule&&rl.schedule.next_review_at",
+  'class="qcard-actions"',
+  'aria-label="编辑此题"',
+  'aria-label="删除此题"',
+  'header{position:static;top:auto;z-index:auto',
+  'z-index:130',
 ]) {
   if (!html.includes(marker)) throw new Error(`voice input marker missing: ${marker}`);
 }

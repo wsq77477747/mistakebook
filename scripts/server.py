@@ -356,12 +356,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def _question_payload(self, question):
         item = dict(question)
-        sections = indexer.split_sections(item.get("body_md") or "")
+        body_md = item.get("body_md") or ""
+        sections = indexer.split_sections(body_md)
         prompt_parts, answer_parts, all_parts = [], [], []
+        leading = re.split(r"^##\s+", body_md, maxsplit=1, flags=re.M)[0].strip()
+        if leading:
+            prompt_parts.append("<h4>题目</h4>%s" % indexer.render_block(leading))
         for title, content in sections:
             block = "<h4>%s</h4>%s" % (indexer.html_mod.escape(title), indexer.render_block(content))
             all_parts.append(block)
-            if title.strip() == "题目":
+            normalized_title = re.sub(r"\s+", "", title)
+            if normalized_title.startswith(("题目", "题干")):
                 prompt_parts.append(block)
             else:
                 answer_parts.append(block)

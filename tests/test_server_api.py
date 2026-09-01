@@ -166,6 +166,28 @@ class ServerApiTests(unittest.TestCase):
         status, _ = self.request("/api/questions", client=anonymous)
         self.assertEqual(status, 401)
 
+    def test_question_prompt_accepts_descriptive_heading_and_plain_body(self):
+        user = server.storage.register_user(
+            "prompt-user", "password123", "prompt-user@example.com"
+        )
+        server.storage.create_question(user["id"], {
+            "no": "PROMPT-1", "title": "变体标题题干", "cat": "测试",
+            "body_md": "## 题目（题目描述，如有表格可保留）\n变体题干内容。\n\n## 正确写法\n正确答案。",
+        })
+        server.storage.create_question(user["id"], {
+            "no": "PROMPT-2", "title": "纯文本题干", "cat": "测试",
+            "body_md": "没有二级标题的纯文本题干。",
+        })
+        status, _ = self.request(
+            "/api/auth/login", {"username": "prompt-user", "password": "password123"}
+        )
+        self.assertEqual(status, 200)
+        _, listing = self.request("/api/questions")
+        questions = {q["no"]: q for q in listing["questions"]}
+        self.assertIn("变体题干内容", questions["PROMPT-1"]["prompt_html"])
+        self.assertNotIn("正确答案", questions["PROMPT-1"]["prompt_html"])
+        self.assertIn("没有二级标题的纯文本题干", questions["PROMPT-2"]["prompt_html"])
+
     def test_register_config_is_public(self):
         anonymous = urllib.request.build_opener()
         status, cfg = self.request("/api/auth/register_config", client=anonymous)
