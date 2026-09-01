@@ -192,6 +192,7 @@ def init_db():
               version INTEGER NOT NULL DEFAULT 1,
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL,
+              notebook_id TEXT,
               deleted_at TEXT
             );
 
@@ -315,6 +316,20 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_community_shares_post
               ON community_shares(post_id);
 
+            CREATE TABLE IF NOT EXISTS notebooks (
+              id TEXT PRIMARY KEY,
+              user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              name TEXT NOT NULL,
+              color TEXT NOT NULL DEFAULT '#3b82f6',
+              icon TEXT NOT NULL DEFAULT '📘',
+              sort_order INTEGER NOT NULL DEFAULT 0,
+              created_at TEXT NOT NULL,
+              archived_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_notebooks_user
+              ON notebooks(user_id, archived_at, sort_order);
+            CREATE INDEX IF NOT EXISTS idx_questions_user_nb
+              ON questions(user_id, notebook_id, deleted_at);
             CREATE TABLE IF NOT EXISTS daily_progress (
               user_id TEXT NOT NULL,
               date TEXT NOT NULL,
@@ -366,6 +381,16 @@ def init_db():
             db.execute("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''")
         if "email_norm" not in user_columns:
             db.execute("ALTER TABLE users ADD COLUMN email_norm TEXT NOT NULL DEFAULT ''")
+        # —— 错题本（科目）系统迁移 ——
+        question_columns = {row[1] for row in db.execute("PRAGMA table_info(questions)")}
+        if "notebook_id" not in question_columns:
+            db.execute("ALTER TABLE questions ADD COLUMN notebook_id TEXT")
+        for (uid,) in db.execute("SELECT id FROM users").fetchall():
+            _nb_id, _ = _ensure_default_notebook(db, uid)
+            db.execute(
+                "UPDATE questions SET notebook_id=? WHERE user_id=? AND notebook_id IS NULL",
+                (_nb_id, uid),
+            )
         db.execute("DROP INDEX IF EXISTS idx_users_email_norm")
         db.execute(
             "CREATE INDEX IF NOT EXISTS idx_users_email_norm_lookup "
@@ -429,6 +454,7 @@ def register_user(username, password, email, invite_code=None):
             raise ValueError("该账号已存在。") from exc
         if inviter_id:  # 邀请成功：邀请人 +1 奖励单位；被邀请人由 invited_by 自动获得 1 单位
             db.execute("UPDATE users SET invite_bonus=invite_bonus+1 WHERE id=?", (inviter_id,))
+        _ensure_default_notebook(db, user_id, now)
     imported = import_legacy_questions(user_id) if first_user else 0
     return {"id": user_id, "username": username, "email": email,
             "is_admin": first_user, "imported": imported,
@@ -1016,21 +1042,22 @@ def _log_change(db, user_id, entity_id, operation, version, entity_type="questio
     )
 
 
-def create_question(user_id, data, source_file=None, question_id=None):
+def create_question(user_id, data, source_file=None, question_id=None, notebook_id=None):
     values = _question_values(data)
     question_id = question_id or str(uuid.uuid4())
     now = _now()
     with connect() as db:
+        nb_id = resolve_notebook_id(db, user_id, notebook_id or data.get("notebook_id"))
         db.execute(
             """INSERT INTO questions(
               id,user_id,source_file,no,title,cat,diff,first_wrong_date,source,error_type,status,
-              wrong_times,rewrong_dates,summary,body_md,search_text,next_review_at,created_at,updated_at
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+              wrong_times,rewrong_dates,summary,body_md,search_text,next_review_at,notebook_id,created_at,updated_at
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 question_id, user_id, source_file, values["no"], values["title"], values["cat"],
                 values["diff"], values["first_wrong_date"], values["source"], values["error_type"],
                 values["status"], values["wrong_times"], values["rewrong_dates"], values["summary"],
-                values["body_md"], values["search_text"], values["next_review_at"], now, now,
+                values["body_md"], values["search_text"], values["next_review_at"], nb_id, now, now,
             ),
         )
         _log_change(db, user_id, question_id, "upsert", 1)
@@ -1061,6 +1088,11 @@ def update_question(user_id, question_id, data, expected_version=None):
                 values["next_review_at"], version, now, question_id, user_id,
             ),
         )
+        if data.get("notebook_id"):
+            db.execute(
+                "UPDATE questions SET notebook_id=? WHERE id=? AND user_id=?",
+                (resolve_notebook_id(db, user_id, data.get("notebook_id")), question_id, user_id),
+            )
         _log_change(db, user_id, question_id, "upsert", version)
     return version
 
@@ -1125,6 +1157,7 @@ def _row_to_question(row, include_body=True):
         "lapses": row["lapses"],
         "version": row["version"],
         "updated_at": row["updated_at"],
+        "notebook_id": row["notebook_id"] if "notebook_id" in row.keys() else None,
         "deleted": bool(row["deleted_at"]),
     }
     if include_body:
@@ -1132,12 +1165,166 @@ def _row_to_question(row, include_body=True):
     return item
 
 
-def list_questions(user_id):
+DEFAULT_NOTEBOOK_NAME = "默认错题本"
+NOTEBOOK_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444",
+                   "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"]
+
+
+def _ensure_default_notebook(db, user_id, now=None):
+    """在给定连接/事务内确保用户至少有一个错题本，返回 (本id, 是否新建)。"""
+    row = db.execute(
+        "SELECT id FROM notebooks WHERE user_id=? AND archived_at IS NULL "
+        "ORDER BY sort_order,created_at,id LIMIT 1",
+        (str(user_id),),
+    ).fetchone()
+    if row:
+        return row["id"], False
+    nb_id = str(uuid.uuid4())
+    db.execute(
+        "INSERT INTO notebooks(id,user_id,name,color,icon,sort_order,created_at) "
+        "VALUES(?,?,?,?,?,?,?)",
+        (nb_id, str(user_id), DEFAULT_NOTEBOOK_NAME, "#3b82f6", "📘", 0, now or _now()),
+    )
+    return nb_id, True
+
+
+def _get_owned_notebook(db, user_id, nb_id):
+    return db.execute(
+        "SELECT * FROM notebooks WHERE id=? AND user_id=? AND archived_at IS NULL",
+        (str(nb_id), str(user_id)),
+    ).fetchone()
+
+
+def resolve_notebook_id(db, user_id, nb_id):
+    """返回归属该用户的有效错题本 id；传入为空或非法时回退到默认本。"""
+    if nb_id:
+        row = _get_owned_notebook(db, user_id, nb_id)
+        if row:
+            return row["id"]
+    default_id, _ = _ensure_default_notebook(db, user_id)
+    return default_id
+
+
+def list_notebooks(user_id):
     with connect() as db:
         rows = db.execute(
-            "SELECT * FROM questions WHERE user_id=? AND deleted_at IS NULL ORDER BY first_wrong_date DESC,title",
-            (user_id,),
+            "SELECT n.*, (SELECT COUNT(*) FROM questions q WHERE q.notebook_id=n.id "
+            "AND q.deleted_at IS NULL) AS cnt FROM notebooks n "
+            "WHERE n.user_id=? AND n.archived_at IS NULL ORDER BY n.sort_order,n.created_at,n.id",
+            (str(user_id),),
         ).fetchall()
+        return [{
+            "id": r["id"], "name": r["name"], "color": r["color"], "icon": r["icon"],
+            "sort_order": r["sort_order"], "count": int(r["cnt"]),
+        } for r in rows]
+
+
+def create_notebook(user_id, name, color=None, icon=None):
+    name = str(name or "").strip()
+    if not name:
+        raise ValueError("错题本名称不能为空。")
+    if len(name) > 30:
+        raise ValueError("名称最多 30 个字符。")
+    with connect() as db:
+        db.execute("BEGIN IMMEDIATE")
+        cnt = db.execute(
+            "SELECT COUNT(*) FROM notebooks WHERE user_id=? AND archived_at IS NULL",
+            (str(user_id),),
+        ).fetchone()[0]
+        if cnt >= 30:
+            raise ValueError("最多创建 30 个错题本。")
+        dup = db.execute(
+            "SELECT 1 FROM notebooks WHERE user_id=? AND name=? AND archived_at IS NULL",
+            (str(user_id), name),
+        ).fetchone()
+        if dup:
+            raise ValueError("已存在同名错题本。")
+        nb_id = str(uuid.uuid4())
+        picked = (str(color).strip() if color else "") or NOTEBOOK_COLORS[cnt % len(NOTEBOOK_COLORS)]
+        picked_icon = (str(icon).strip()[:4] if icon else "") or "📘"
+        db.execute(
+            "INSERT INTO notebooks(id,user_id,name,color,icon,sort_order,created_at) VALUES(?,?,?,?,?,?,?)",
+            (nb_id, str(user_id), name, picked[:20], picked_icon, cnt, _now()),
+        )
+    return nb_id
+
+
+def update_notebook(user_id, nb_id, name=None, color=None, icon=None):
+    sets, params = [], []
+    if name is not None:
+        name = str(name or "").strip()
+        if not name:
+            raise ValueError("名称不能为空。")
+        if len(name) > 30:
+            raise ValueError("名称最多 30 个字符。")
+        sets.append("name=?"); params.append(name)
+    if color is not None and str(color).strip():
+        sets.append("color=?"); params.append(str(color).strip()[:20])
+    if icon is not None and str(icon).strip():
+        sets.append("icon=?"); params.append(str(icon).strip()[:4])
+    if not sets:
+        return
+    params.extend([str(nb_id), str(user_id)])
+    with connect() as db:
+        row = _get_owned_notebook(db, user_id, nb_id)
+        if not row:
+            raise KeyError("错题本不存在。")
+        if name is not None:
+            dup = db.execute(
+                "SELECT 1 FROM notebooks WHERE user_id=? AND name=? AND id<>? AND archived_at IS NULL",
+                (str(user_id), name, str(nb_id)),
+            ).fetchone()
+            if dup:
+                raise ValueError("已存在同名错题本。")
+        db.execute("UPDATE notebooks SET " + ",".join(sets) + " WHERE id=? AND user_id=?", params)
+
+
+def delete_notebook(user_id, nb_id):
+    with connect() as db:
+        db.execute("BEGIN IMMEDIATE")
+        row = _get_owned_notebook(db, user_id, nb_id)
+        if not row:
+            raise KeyError("错题本不存在。")
+        total = db.execute(
+            "SELECT COUNT(*) FROM notebooks WHERE user_id=? AND archived_at IS NULL",
+            (str(user_id),),
+        ).fetchone()[0]
+        if total <= 1:
+            raise ValueError("至少保留一个错题本，不能删除。")
+        cnt = db.execute(
+            "SELECT COUNT(*) FROM questions WHERE notebook_id=? AND user_id=? AND deleted_at IS NULL",
+            (str(nb_id), str(user_id)),
+        ).fetchone()[0]
+        if cnt:
+            raise ValueError("该错题本里还有 %d 道题，请先把题目移到其它错题本后再删除。" % cnt)
+        db.execute("DELETE FROM notebooks WHERE id=? AND user_id=?", (str(nb_id), str(user_id)))
+
+
+def move_questions(user_id, question_ids, target_notebook_id):
+    """把若干道题移动到目标错题本，返回实际移动条数。"""
+    ids = [str(x) for x in (question_ids or []) if x]
+    if not ids:
+        return 0
+    with connect() as db:
+        target = resolve_notebook_id(db, user_id, target_notebook_id)
+        placeholders = ",".join("?" * len(ids))
+        cur = db.execute(
+            "UPDATE questions SET notebook_id=?,updated_at=? WHERE user_id=? AND deleted_at IS NULL "
+            "AND id IN (%s)" % placeholders,
+            [target, _now(), str(user_id)] + ids,
+        )
+        return cur.rowcount
+
+
+def list_questions(user_id, notebook_id=None):
+    sql = "SELECT * FROM questions WHERE user_id=? AND deleted_at IS NULL"
+    params = [user_id]
+    if notebook_id and notebook_id != "all":
+        sql += " AND notebook_id=?"
+        params.append(notebook_id)
+    sql += " ORDER BY first_wrong_date DESC,title"
+    with connect() as db:
+        rows = db.execute(sql, params).fetchall()
     return [_row_to_question(row) for row in rows]
 
 
@@ -1150,21 +1337,29 @@ def get_question(user_id, question_id, include_deleted=False):
     return _row_to_question(row) if row else None
 
 
-def due_questions(user_id, limit=20):
+def due_questions(user_id, limit=20, notebook_id=None):
     limit = min(100, max(1, int(limit or 20)))
+    nb_clause, nb_params = "", []
+    if notebook_id and notebook_id != "all":
+        nb_clause = " AND notebook_id=?"
+        nb_params = [notebook_id]
+    today = _today().isoformat()
     with connect() as db:
         rows = db.execute(
             "SELECT * FROM questions WHERE user_id=? AND deleted_at IS NULL AND next_review_at<=? "
-            "ORDER BY next_review_at, lapses DESC, first_wrong_date LIMIT ?",
-            (user_id, _today().isoformat(), limit),
+            + nb_clause +
+            " ORDER BY next_review_at, lapses DESC, first_wrong_date LIMIT ?",
+            [user_id, today] + nb_params + [limit],
         ).fetchall()
         reviewed_today = db.execute(
-            "SELECT COUNT(*) FROM review_events WHERE user_id=? AND substr(created_at,1,10)=?",
-            (user_id, _today().isoformat()),
+            "SELECT COUNT(*) FROM review_events r JOIN questions q ON q.id=r.question_id "
+            "WHERE r.user_id=? AND substr(r.created_at,1,10)=?" +
+            (" AND q.notebook_id=?" if nb_params else ""),
+            [user_id, today] + nb_params,
         ).fetchone()[0]
         due_total = db.execute(
-            "SELECT COUNT(*) FROM questions WHERE user_id=? AND deleted_at IS NULL AND next_review_at<=?",
-            (user_id, _today().isoformat()),
+            "SELECT COUNT(*) FROM questions WHERE user_id=? AND deleted_at IS NULL AND next_review_at<=?" + nb_clause,
+            [user_id, today] + nb_params,
         ).fetchone()[0]
     return [_row_to_question(row) for row in rows], {"due": due_total, "reviewed_today": reviewed_today}
 
@@ -1333,7 +1528,7 @@ def _meta_to_data(meta, body):
     }
 
 
-def import_markdown_content(user_id, name, content):
+def import_markdown_content(user_id, name, content, notebook_id=None):
     """导入一段 Markdown 错题文本（含或不含 frontmatter）。
 
     以「用户 + 文件名 + 内容哈希」生成固定 ID：重复导入相同文件自动跳过；
@@ -1347,7 +1542,7 @@ def import_markdown_content(user_id, name, content):
         uuid.NAMESPACE_URL, "sql-wrongbook-import:%s:%s:%s" % (
             user_id, name, hashlib.sha256(content.encode("utf-8")).hexdigest()[:16])))
     try:
-        create_question(user_id, _meta_to_data(meta, body), question_id=question_id)
+        create_question(user_id, _meta_to_data(meta, body), question_id=question_id, notebook_id=notebook_id)
     except sqlite3.IntegrityError:
         return question_id, False
     return question_id, True

@@ -584,6 +584,27 @@
 .pp-posts{margin-top:4px;display:grid;gap:9px;max-height:330px;overflow:auto}
 .pp-post{background:#f8fafc;border:1px solid #eef1f6;border-radius:11px;padding:10px 12px;font-size:13px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;color:#334155}
 .pp-post .pp-time{display:block;color:#94a3b8;font-size:11.5px;margin-top:5px}
+.nb-nav-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+#nb-manage-btn{font-size:11px;font-weight:600;border:1px solid var(--line);background:#fff;color:var(--brand);border-radius:7px;padding:2px 8px;cursor:pointer;white-space:nowrap}
+#nb-manage-btn:hover{border-color:var(--brand)}
+#nav-notebooks{margin-bottom:18px;display:grid;gap:2px}
+.nb-item{display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:8px;cursor:pointer;font-size:13.5px;color:#475569;font-weight:500}
+.nb-item:hover{background:#f1f5fb}
+.nb-item.active{background:var(--brand-soft);color:var(--brand);font-weight:700}
+.nb-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.06)}
+.nb-item .cnt{margin-left:auto;color:#94a3b8;font-weight:500}
+.nb-item.active .cnt{color:var(--brand)}
+.nb-item.all-item .nb-dot{background:linear-gradient(135deg,#94a3b8,#64748b)}
+#nb-list{display:grid;gap:8px;margin:10px 0;max-height:300px;overflow:auto}
+.nb-row{display:flex;align-items:center;gap:8px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:7px 10px}
+.nb-dot-btn{width:20px;height:20px;border-radius:50%;border:0;cursor:pointer;flex-shrink:0;box-shadow:inset 0 0 0 2px #fff,0 0 0 1px rgba(0,0,0,.08)}
+.nb-row input{flex:1;min-width:0;border:1px solid transparent;background:transparent;padding:4px 6px;border-radius:6px;font:inherit;color:#1e293b}
+.nb-row input:focus{border-color:var(--brand);background:#fff;outline:none}
+.nb-row .nb-del{border:1px solid var(--line);background:#fff;border-radius:7px;padding:4px 10px;cursor:pointer;font-size:12px;color:#64748b}
+.nb-row .nb-del:hover{border-color:#ef4444;color:#ef4444}
+.nb-new{display:flex;gap:8px;margin-top:6px}
+.nb-new input{flex:1}
+.nb-current-tag{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--brand);background:var(--brand-soft);border-radius:20px;padding:2px 10px;margin-left:8px}
 @media(max-width:700px){.community-head{align-items:flex-start;flex-direction:column}.community-actions{justify-content:space-between}.community-actions button{padding:7px 8px}.welcome-card{padding:22px}}
 </style>
 </head>
@@ -637,6 +658,8 @@
 <!-- ① 错题列表 -->
 <div class="layout" id="tab-list" hidden>
   <nav>
+    <h3 class="nb-nav-head">📚 错题本 <button type="button" id="nb-manage-btn">＋管理</button></h3>
+    <div id="nav-notebooks"></div>
     <h3>📋 全部题目</h3>
     <a href="#all">全部题目<span class="cnt" id="nav-total">0 题</span></a>
     <h3>🗂 知识点分类</h3>
@@ -936,6 +959,21 @@
   </div>
 </div>
 
+<!-- 错题本管理弹窗 -->
+<div class="modal-mask" id="nb-modal" hidden>
+  <div class="modal" style="max-width:460px">
+    <h3 style="margin:0 0 4px">📚 管理错题本（科目）</h3>
+    <p class="meta" style="margin:0 0 6px">不同科目的题放进不同错题本；点色块可切换颜色，改名后失焦自动保存；错题本里还有题时不能删除。</p>
+    <div id="nb-list"></div>
+    <div class="nb-new">
+      <input id="nb-new-name" maxlength="30" placeholder="新错题本名称，如 Python / 行测 / 面试">
+      <button class="btn-primary" id="nb-new-add" type="button">＋新建</button>
+    </div>
+    <div class="import-state" id="nb-state"></div>
+    <div class="mrow" style="justify-content:flex-end;margin-top:12px"><button class="btn-plain" id="nb-close" type="button">关闭</button></div>
+  </div>
+</div>
+
 <!-- AI 设置弹窗 -->
 <div class="modal-mask" id="ai-modal" hidden>
   <div class="modal">
@@ -1177,6 +1215,10 @@ function handleLevelResult(r){
 
 /* ================= 账号、数据库与同步 ================= */
 let currentUser=null,todayQueue=[],todayStats={due:0,reviewed_today:0},activeCategory='全部';
+let notebooks=[],currentNotebookId='all';
+const NB_PALETTE=["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#14b8a6","#f97316"];
+function currentData(){const D=window.__QUIZ_DATA__||[];return currentNotebookId==='all'?D:D.filter(q=>q.notebook_id===currentNotebookId);}
+function nbCount(id){return (window.__QUIZ_DATA__||[]).filter(q=>q.notebook_id===id).length;}
 function deviceId(){
   let id=localStorage.getItem('sqlwb_device_id');
   if(!id){id='web-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);localStorage.setItem('sqlwb_device_id',id);}
@@ -1266,7 +1308,7 @@ async function enterAccount(user, levelResult){
   paintAllAvatars(user);
   document.getElementById('ai-settings-btn').hidden=!user.is_admin;
   if(user.is_admin){document.getElementById('tab-analytics-btn').hidden=false;}
-  await loadQuestions();await loadToday();refreshCurrentModel();
+  await loadNotebooks();await loadQuestions();await loadToday();refreshCurrentModel();
   loadLevel().then(()=>{ if(levelResult)handleLevelResult(levelResult); });
 }
 const EMAIL_RE=/^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
@@ -1506,15 +1548,42 @@ document.querySelectorAll('.modal-mask').forEach(function(mask){
 });
 document.getElementById('header-login-btn').addEventListener('click',()=>showAuth());
 document.getElementById('logout-btn').addEventListener('click',async()=>{
-  await fetch('/api/auth/logout',{method:'POST'});currentUser=null;window.__QUIZ_DATA__=[];
+  await fetch('/api/auth/logout',{method:'POST'});currentUser=null;window.__QUIZ_DATA__=[];notebooks=[];currentNotebookId='all';
   document.getElementById('user-area').hidden=true;document.getElementById('header-login-btn').hidden=false;document.getElementById('tab-analytics-btn').hidden=true;
   renderLibrary();switchTab('community');document.getElementById('header-stats').textContent='已安全退出 · 可继续浏览讨论室';
 });
 
+function renderNotebookNav(){
+  const box=document.getElementById('nav-notebooks');if(!box)return;
+  const total=(window.__QUIZ_DATA__||[]).length;
+  let html='<div class="nb-item all-item'+(currentNotebookId==='all'?' active':'')+'" data-nb="all"><span class="nb-dot"></span>全部错题<span class="cnt">'+total+' 题</span></div>';
+  html+=notebooks.map(n=>'<div class="nb-item'+(n.id===currentNotebookId?' active':'')+'" data-nb="'+esc(n.id)+'"><span class="nb-dot" style="background:'+esc(n.color)+'"></span>'+esc(n.icon||'📘')+' '+esc(n.name)+'<span class="cnt">'+nbCount(n.id)+' 题</span></div>').join('');
+  box.innerHTML=html;fillEditNotebookSelect();
+}
+function fillEditNotebookSelect(selVal){
+  const sel=document.getElementById('edit-notebook');if(!sel)return;
+  sel.innerHTML=notebooks.map(n=>'<option value="'+esc(n.id)+'">'+esc(n.icon||'📘')+' '+esc(n.name)+'</option>').join('');
+  if(selVal)sel.value=selVal;
+}
+function selectNotebook(id){
+  currentNotebookId=id||'all';activeCategory='全部';
+  renderNotebookNav();renderLibrary();
+  const t=document.getElementById('tab-today');if(t&&!t.hidden)loadToday();
+  const tr=document.getElementById('tab-trend');if(tr&&!tr.hidden)renderTrend();
+}
+document.getElementById('nav-notebooks').addEventListener('click',e=>{
+  const it=e.target.closest('.nb-item');if(!it)return;selectNotebook(it.dataset.nb);
+});
+async function loadNotebooks(){
+  try{const j=await apiJson('/api/notebooks');notebooks=j.notebooks||[];}catch(e){notebooks=[];}
+  if(currentNotebookId!=='all'&&!notebooks.some(n=>n.id===currentNotebookId))currentNotebookId='all';
+  renderNotebookNav();
+}
 function renderLibrary(){
-  const D=window.__QUIZ_DATA__,groups={};D.forEach(q=>(groups[q.cat||'未分类']??=[]).push(q));
+  const D=currentData(),groups={};D.forEach(q=>(groups[q.cat||'未分类']??=[]).push(q));
   const cats=Object.keys(groups).sort();
-  document.getElementById('header-stats').textContent='共 '+D.length+' 题 · '+cats.length+' 个知识点 · 云端已同步';
+  const scopeName=currentNotebookId==='all'?'全部错题':((notebooks.find(n=>n.id===currentNotebookId)||{}).name||'当前错题本');
+  document.getElementById('header-stats').textContent='「'+scopeName+'」'+D.length+' 题 · '+cats.length+' 个知识点 · 云端已同步';
   document.getElementById('nav-total').textContent=D.length+' 题';
   document.getElementById('nav-categories').innerHTML=cats.map(c=>'<a href="#cat-'+encodeURIComponent(c)+'" data-category="'+esc(c)+'">'+esc(c)+'<span class="cnt">'+groups[c].length+' 题</span></a>').join('');
   document.getElementById('nav-questions').innerHTML=cats.map(c=>'<div class="nav-sub"><b>'+esc(c)+'</b>'+groups[c].map(q=>'<a class="question-jump" href="#q-'+q.id+'" data-question-id="'+q.id+'">· '+esc(q.no)+' '+esc(q.title)+'</a>').join('')+'</div>').join('');
@@ -1531,8 +1600,63 @@ function renderLibrary(){
     ).join('')+'</section>').join(''):'<div class="empty-library">还没有错题。点击右下角 AI 助手录入第一道题。</div>';
 }
 async function loadQuestions(){
-  const j=await apiJson('/api/questions');window.__QUIZ_DATA__=j.questions||[];renderLibrary();
+  const j=await apiJson('/api/questions');window.__QUIZ_DATA__=j.questions||[];renderNotebookNav();renderLibrary();
 }
+/* ===== 错题本（科目）管理弹窗 ===== */
+async function nbApi(url,body){
+  const j=await apiJson(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
+  if(j.notebooks){
+    notebooks=j.notebooks;
+    if(currentNotebookId!=='all'&&!notebooks.some(n=>n.id===currentNotebookId))currentNotebookId='all';
+    renderNotebookNav();renderLibrary();
+    if(!document.getElementById('nb-modal').hidden)renderNbManager();
+  }
+  return j;
+}
+function nbStateMsg(t){document.getElementById('nb-state').textContent=t||'';}
+function openNbManager(){renderNbManager();nbStateMsg('');document.getElementById('nb-modal').hidden=false;document.getElementById('nb-new-name').focus();}
+function renderNbManager(){
+  const box=document.getElementById('nb-list');
+  box.innerHTML=notebooks.map(n=>
+    '<div class="nb-row" data-nb="'+esc(n.id)+'">'+
+    '<button type="button" class="nb-dot-btn" data-act="color" title="点击切换颜色" style="background:'+esc(n.color)+'"></button>'+
+    '<input value="'+esc(n.name)+'" maxlength="30" data-act="name" aria-label="错题本名称">'+
+    '<button type="button" class="nb-del" data-act="del">删除</button></div>').join('');
+}
+async function nbCreate(){
+  const inp=document.getElementById('nb-new-name'),name=inp.value.trim();
+  if(!name)return;
+  try{await nbApi('/api/notebooks/create',{name});inp.value='';nbStateMsg('✅ 已新建，可在左侧切换。');}
+  catch(e){nbStateMsg('❌ '+e.message);}
+}
+document.getElementById('nb-manage-btn').addEventListener('click',openNbManager);
+document.getElementById('nb-close').addEventListener('click',()=>{document.getElementById('nb-modal').hidden=true;});
+document.getElementById('nb-modal').addEventListener('click',e=>{if(e.target.id==='nb-modal')e.target.hidden=true;});
+document.getElementById('nb-new-add').addEventListener('click',nbCreate);
+document.getElementById('nb-new-name').addEventListener('keydown',e=>{if(e.key==='Enter')nbCreate();});
+document.getElementById('nb-list').addEventListener('click',async e=>{
+  const row=e.target.closest('.nb-row');if(!row)return;
+  const id=row.dataset.nb,act=e.target.dataset.act;
+  if(act==='color'){
+    const cur=notebooks.find(n=>n.id===id);const idx=NB_PALETTE.indexOf(cur?cur.color:'');
+    try{await nbApi('/api/notebooks/update',{id,color:NB_PALETTE[(idx+1+NB_PALETTE.length)%NB_PALETTE.length]});}
+    catch(err){nbStateMsg('❌ '+err.message);}
+  }else if(act==='del'){
+    const cur=notebooks.find(n=>n.id===id);if(!cur)return;
+    if(!confirm('确定删除错题本「'+cur.name+'」吗？（本内还有题时无法删除）'))return;
+    try{await nbApi('/api/notebooks/delete',{id});nbStateMsg('✅ 已删除。');}
+    catch(err){nbStateMsg('❌ '+err.message);}
+  }
+});
+document.getElementById('nb-list').addEventListener('change',async e=>{
+  if(e.target.dataset.act!=='name')return;
+  const row=e.target.closest('.nb-row');const id=row.dataset.nb,name=e.target.value.trim();
+  const old=(notebooks.find(n=>n.id===id)||{}).name||'';
+  if(!name){e.target.value=old;return;}
+  if(name===old)return;
+  try{await nbApi('/api/notebooks/update',{id,name});nbStateMsg('✅ 已保存。');}
+  catch(err){nbStateMsg('❌ '+err.message);e.target.value=old;}
+});
 document.getElementById('category-filter').addEventListener('click',e=>{
   const b=e.target.closest('button[data-category]');if(!b)return;activeCategory=b.dataset.category;renderLibrary();
 });
@@ -1567,7 +1691,7 @@ async function loadReviewHistory(){
 }
 async function loadToday(){
   if(!currentUser)return;document.getElementById('review-loading').hidden=false;document.getElementById('review-card').hidden=true;document.getElementById('review-empty').hidden=true;
-  try{const j=await apiJson('/api/review/today?limit=30');todayQueue=j.questions||[];todayStats=j.stats||{due:0,reviewed_today:0};renderReview();loadReviewHistory();}
+  try{const j=await apiJson('/api/review/today?limit=30&notebook='+encodeURIComponent(currentNotebookId));todayQueue=j.questions||[];todayStats=j.stats||{due:0,reviewed_today:0};renderReview();loadReviewHistory();}
   catch(e){document.getElementById('review-loading').innerHTML='<strong>暂时无法读取复习计划</strong>'+esc(e.message);}
 }
 document.getElementById('review-reveal').addEventListener('click',()=>{
@@ -1855,7 +1979,7 @@ async function runImport(fileList){
     for(const f of mdFiles){
       if(f.size<=1024*1024)files.push({name:f.name,content:await f.text()});
     }
-    const j=await apiJson('/api/import_batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({files})});
+    const j=await apiJson('/api/import_batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({files,notebook_id:currentNotebookId==='all'?null:currentNotebookId})});
     const lines=['✅ 成功导入 '+j.imported+' 个文件。'];
     (j.skipped||[]).forEach(s=>lines.push('⏭ '+s.name+'：'+s.reason));
     (j.failed||[]).forEach(f=>lines.push('❌ '+f.name+'：'+f.error));
@@ -2106,7 +2230,7 @@ function sortedKV(m){return Object.entries(m).sort((a,b)=>a[0]<b[0]?-1:1);}
 function sortedByVal(m){return Object.entries(m).sort((a,b)=>b[1]-a[1]);}
 
 function renderTrend(){
-  const D=window.__QUIZ_DATA__;
+  const D=currentData();
   // 月度数据
   const newM=countBy(D,q=>monthKey(q.date));
   const freqM={};
@@ -2173,10 +2297,10 @@ function searchScore(q,kw){
   if(synTarget&&(q.cat||'').includes(SYN[synTarget]))s+=5;
   return s;
 }
-function related(qid,n=3){
-  const D=window.__QUIZ_DATA__,base=D[qid];
+function related(baseQ,n=3){
+  const D=currentData(),base=baseQ;
   const scored=D.map((q,i)=>{
-    if(i===qid)return null;
+    if(q.id===base.id)return null;
     let s=0;
     if(q.cat&&base.cat&&q.cat===base.cat)s+=3;
     if(q.errtype&&base.errtype&&q.errtype===base.errtype)s+=2;
@@ -2189,36 +2313,37 @@ function related(qid,n=3){
   }).filter(Boolean).sort((a,b)=>b.s-a.s).slice(0,n).filter(x=>x.s>0);
   return scored;
 }
-function renderSearchResult(q,i){
-  return `<div class="sresult" onclick="openQuestion(${i})">
+function renderSearchResult(q){
+  return `<div class="sresult" onclick="openQuestionById('${q.id}')">
     <div class="shead"><span class="badge">${esc(q.no)}</span><b>${esc(q.title)}</b>
       <span class="chip">${esc(q.cat)}</span><span class="chip type">${esc(q.errtype)}</span>
       <span class="smeta">${esc(q.date)} · ${esc(q.diff)}</span></div>
     <div class="ssum">💡 ${esc(q.summary)}</div></div>`;
 }
-function openQuestion(idx){
-  const q=window.__QUIZ_DATA__[idx];if(!q)return;const id='q-'+q.id;
+function openQuestionById(id){
+  const q=(window.__QUIZ_DATA__||[]).find(x=>x.id===id);if(!q)return;
+  if(currentNotebookId!=='all'&&q.notebook_id!==currentNotebookId){currentNotebookId='all';renderNotebookNav();}
   activeCategory='全部';renderLibrary();switchTab('list');
-  const el=document.getElementById(id);
+  const el=document.getElementById('q-'+id);
   if(el){const d=el.querySelector('details');if(d)d.open=true;setTimeout(()=>el.scrollIntoView({behavior:'smooth'}),50);}
 }
 function doSearch(){
   const kw=document.getElementById('s-input').value.trim().toLowerCase();
   const box=document.getElementById('s-results');
   if(!kw){box.innerHTML='<p style="color:var(--muted)">输入关键词开始检索。</p>';return;}
-  const D=window.__QUIZ_DATA__;
+  const D=currentData();
   const scored=D.map((q,i)=>({q,i,s:searchScore(q,kw)})).filter(x=>x.s>0).sort((a,b)=>b.s-a.s);
   document.getElementById('s-rel').innerHTML='';
   document.getElementById('s-rel-title').hidden=true;
   if(!scored.length){box.innerHTML='<p style="color:var(--muted)">没有匹配结果，试试换关键词，或先用“趋势分析”看看整体情况。</p>';return;}
-  box.innerHTML=scored.map(x=>renderSearchResult(x.q,x.i)).join('');
+  box.innerHTML=scored.map(x=>renderSearchResult(x.q)).join('');
   // 相关推荐（取第一个结果做锚点）
   const top=scored[0];
-  const rel=related(top.i);
+  const rel=related(D.find(x=>x.id===top.q.id));
   if(rel.length){
     document.getElementById('s-rel-title').hidden=false;
-    document.getElementById('s-rel-title').textContent='🎯 与「'+D[top.i].title+'」相关的错题';
-    document.getElementById('s-rel').innerHTML=rel.map(x=>renderSearchResult(x.q,x.i)).join('');
+    document.getElementById('s-rel-title').textContent='🎯 与「'+top.q.title+'」相关的错题';
+    document.getElementById('s-rel').innerHTML=rel.map(x=>renderSearchResult(x.q)).join('');
   }
 }
 document.getElementById('s-btn').addEventListener('click',doSearch);
@@ -2228,7 +2353,7 @@ document.getElementById('s-input').addEventListener('keydown',e=>{if(e.key==='En
 const API='/api/chat';
 const cfg={base_url:'https://ark.cn-beijing.volces.com/api/v3',api_key:'',model:''};
 function sysPrompt(){
-  const D=window.__QUIZ_DATA__.map(q=>`【${q.no}】${q.title}｜知识点:${q.cat}｜错误类型:${q.errtype}｜难度:${q.diff}｜日期:${q.date}｜状态:${q.status}｜做错${q.times}次｜一句话错因:${q.summary}`);
+  const D=currentData().map(q=>`【${q.no}】${q.title}｜知识点:${q.cat}｜错误类型:${q.errtype}｜难度:${q.diff}｜日期:${q.date}｜状态:${q.status}｜做错${q.times}次｜一句话错因:${q.summary}`);
   return '你是错题本的数据分析助手。下面是用户错题的结构化数据：\n'+D.join('\n')+'\n请基于这些数据回答，能引用具体题号时引用题号，给出可执行的复习建议。';
 }
 function aiAvatarEl(){
@@ -2391,7 +2516,7 @@ function addState(msg,cls){const s=document.getElementById('add-state');s.textCo
 async function classify(){
   const raw=document.getElementById('add-raw').value.trim();
   if(!raw && !curImageDataUrl){addState('请先粘贴错题内容或上传截图。','err');return;}
-  const cats=[...new Set(window.__QUIZ_DATA__.map(q=>q.cat))];
+  const cats=[...new Set(currentData().map(q=>q.cat))];
   const today=new Date().toISOString().slice(0,10);
   const body={raw,categories:cats,today};
   if(curImageDataUrl) body.image=curImageDataUrl;
@@ -2422,6 +2547,7 @@ function fillPreview(d){
 }
 function collectPreview(){
   return {
+    notebook_id:currentNotebookId==='all'?null:currentNotebookId,
     no:document.getElementById('pv-no').value.trim(),
     title:document.getElementById('pv-title').value.trim(),
     cat:document.getElementById('pv-cat').value.trim(),
@@ -2754,6 +2880,7 @@ function openEditModal(file){
       if(!res||!res.ok){alert('加载失败：'+(res&&res.message||'未知'));modal.hidden=true;return;}
       document.getElementById('edit-form').style.display='block';
       document.getElementById('edit-version').value=res.version||'';
+      fillEditNotebookSelect(res.notebook_id);
       var m=res.meta||{};
       document.getElementById('edit-no').value=m['题号']||'';
       document.getElementById('edit-title').value=m['标题']||'';
@@ -2794,6 +2921,7 @@ document.addEventListener('click',function(e){
     var payload={
       file:file,
       version:document.getElementById('edit-version').value||null,
+      notebook_id:document.getElementById('edit-notebook').value,
       meta:{
         '题号':document.getElementById('edit-no').value.trim(),
         '标题':document.getElementById('edit-title').value.trim(),
@@ -2952,6 +3080,9 @@ initAccount();
       <div id="edit-form" style="display:none">
         <input type="hidden" id="edit-file">
         <input type="hidden" id="edit-version">
+        <div class="edit-row">
+          <div class="edit-field full"><label>所属错题本（科目）</label><select id="edit-notebook"></select></div>
+        </div>
         <div class="edit-row">
           <div class="edit-field"><label>题号</label><input id="edit-no" type="text"></div>
           <div class="edit-field"><label>标题</label><input id="edit-title" type="text"></div>

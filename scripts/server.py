@@ -515,7 +515,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._send_json(200, {"questions": [self._question_payload(q) for q in storage.list_questions(self.user["id"])]})
         if path == "/api/review/today":
             args = parse_qs(urlparse(self.path).query)
-            due, stats = storage.due_questions(self.user["id"], args.get("limit", [20])[0])
+            due, stats = storage.due_questions(
+                self.user["id"], args.get("limit", [20])[0], args.get("notebook", [""])[0]
+            )
             return self._send_json(200, {"questions": [self._question_payload(q) for q in due], "stats": stats})
         if path == "/api/review/history":
             args = parse_qs(urlparse(self.path).query)
@@ -529,6 +531,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._ai_quota()
         if path == "/api/my_ai_config":
             return self._send_json(200, self._my_ai_config_view())
+        if path == "/api/notebooks":
+            return self._send_json(200, {"notebooks": storage.list_notebooks(self.user["id"])})
         if path == "/api/profile":
             return self._send_json(200, {"profile": storage.get_profile(self.user["id"])})
         if path == "/api/level":
@@ -581,6 +585,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._save_my_ai_config()
         if path == "/api/profile":
             return self._save_profile()
+        if path == "/api/notebooks/create":
+            return self._nb_create()
+        if path == "/api/notebooks/update":
+            return self._nb_update()
+        if path == "/api/notebooks/delete":
+            return self._nb_delete()
+        if path == "/api/notebooks/move":
+            return self._nb_move()
         if path == "/api/community/posts":
             return self._community_create_post()
         if path == "/api/community/comments":
@@ -866,6 +878,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def _import_batch(self):
         body = self._read_body()
         files = body.get("files")
+        nb_id = body.get("notebook_id")
         if not isinstance(files, list) or not files:
             return self._send_json(400, {"error": "NO_FILES", "message": "请先选择要导入的 Markdown 文件。"})
         if len(files) > 200:
@@ -880,7 +893,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 failed.append({"name": name, "error": "文件过大（超过 1MB）"})
                 continue
             try:
-                question_id, created = storage.import_markdown_content(self.user["id"], name, content)
+                question_id, created = storage.import_markdown_content(
+                    self.user["id"], name, content, notebook_id=nb_id)
                 if created:
                     imported_ids.append(question_id)
                 else:
@@ -920,6 +934,50 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._send_json(200, {"ok": True, "profile": profile})
         except ValueError as exc:
             self._send_json(400, {"error": "PROFILE_FAIL", "message": str(exc)})
+
+    # ---- 错题本（科目） ----
+    def _nb_create(self):
+        body = self._read_body()
+        try:
+            nb_id = storage.create_notebook(
+                self.user["id"], body.get("name"), body.get("color"), body.get("icon"))
+        except ValueError as exc:
+            return self._send_json(400, {"error": "NB_FAIL", "message": str(exc)})
+        self._track_event("create_notebook")
+        return self._send_json(200, {"ok": True, "id": nb_id,
+                                     "notebooks": storage.list_notebooks(self.user["id"])})
+
+    def _nb_update(self):
+        body = self._read_body()
+        try:
+            storage.update_notebook(
+                self.user["id"], str(body.get("id") or ""),
+                name=body.get("name") if "name" in body else None,
+                color=body.get("color") if "color" in body else None,
+                icon=body.get("icon") if "icon" in body else None)
+        except KeyError:
+            return self._send_json(404, {"error": "NOT_FOUND", "message": "错题本不存在。"})
+        except ValueError as exc:
+            return self._send_json(400, {"error": "NB_FAIL", "message": str(exc)})
+        return self._send_json(200, {"ok": True,
+                                     "notebooks": storage.list_notebooks(self.user["id"])})
+
+    def _nb_delete(self):
+        body = self._read_body()
+        try:
+            storage.delete_notebook(self.user["id"], str(body.get("id") or ""))
+        except KeyError:
+            return self._send_json(404, {"error": "NOT_FOUND", "message": "错题本不存在。"})
+        except ValueError as exc:
+            return self._send_json(400, {"error": "NB_FAIL", "message": str(exc)})
+        return self._send_json(200, {"ok": True,
+                                     "notebooks": storage.list_notebooks(self.user["id"])})
+
+    def _nb_move(self):
+        body = self._read_body()
+        moved = storage.move_questions(
+            self.user["id"], body.get("question_ids") or [], body.get("target_notebook_id"))
+        return self._send_json(200, {"ok": True, "moved": moved})
 
     def _grant(self, action):
         """动作发放经验，失败不影响主流程；返回结果或 None。"""
@@ -1263,7 +1321,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "一句话总结": question["summary"],
         }
         return self._send_json(200, {"ok": True, "meta": meta, "body": question["body_md"],
-                                     "version": question["version"]})
+                                     "version": question["version"],
+                                     "notebook_id": question.get("notebook_id")})
 
     # ---- 编辑错题（更新元信息和正文） ----
     def _edit_quiz(self):
@@ -1285,6 +1344,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "times": meta.get("做错次数"), "redates": meta.get("重错日期"),
             "summary": meta.get("一句话总结"), "body_md": new_body,
             "next_review_at": current["next_review_at"],
+            "notebook_id": body.get("notebook_id"),
         }
         try:
             version = storage.update_question(self.user["id"], question_id, data, body.get("version"))
