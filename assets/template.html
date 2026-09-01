@@ -345,27 +345,29 @@
                                   display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;background:linear-gradient(135deg,#2f6fed,#6d28d9)}
   .profile-upload-row .big-avatar img{width:100%;height:100%;object-fit:cover}
   .profile-meta{font-size:12.5px;color:var(--muted);line-height:1.6}
-  .me-display-name{font-size:13px;opacity:.9;margin:2px 0}
-  .me-bio{flex:0 0 100%;width:100%;font-size:13px;line-height:1.6;background:rgba(255,255,255,.14);border-radius:10px;padding:8px 12px;margin-top:4px;display:none}
+  .me-bio{flex:0 0 100%;width:100%;font-size:13.5px;line-height:1.6;color:#475569;
+          background:#eef3fa;border:1px solid #e6ecf5;border-radius:12px;padding:11px 15px;margin-top:6px;display:none}
   .me-bio.show{display:block}
+  .me-bio::before{content:"个人简介";color:#94a3b8;font-weight:600;margin-right:10px}
   /* 等级徽章与经验条 */
-  .me-level{display:flex;align-items:center;gap:9px;margin-top:9px;cursor:pointer;max-width:300px;width:100%;
-            background:rgba(255,255,255,.16);border-radius:11px;padding:6px 11px;transition:background .15s}
-  .me-level:hover{background:rgba(255,255,255,.24)}
-  .level-badge{flex-shrink:0;width:40px;height:40px;border-radius:11px;display:flex;flex-direction:column;
+  .me-level{display:flex;align-items:center;gap:10px;margin-top:11px;cursor:pointer;max-width:340px;width:100%;
+            background:linear-gradient(135deg,#3b414e,#262a33);border-radius:12px;padding:8px 13px;
+            box-shadow:0 5px 14px rgba(30,35,45,.22);transition:filter .15s}
+  .me-level:hover{filter:brightness(1.15)}
+  .level-badge{flex-shrink:0;width:42px;height:42px;border-radius:11px;display:flex;flex-direction:column;
                align-items:center;justify-content:center;color:#fff;font-weight:800;line-height:1;
-               box-shadow:0 3px 8px rgba(0,0,0,.18)}
+               box-shadow:0 3px 8px rgba(0,0,0,.28)}
   .level-badge small{font-size:8px;font-weight:700;opacity:.92;margin-top:2px}
   .level-badge b{font-size:15px}
   .level-main{flex:1;min-width:0}
   .level-title-row{display:flex;align-items:center;gap:8px;margin-bottom:4px}
-  .level-title{font-weight:800;font-size:13px;color:#fff}
+  .level-title{font-weight:800;font-size:13px;color:#fff;white-space:nowrap}
   .level-tier{font-size:11px;font-weight:700;background:rgba(255,255,255,.22);color:#fff;
               padding:1px 8px;border-radius:20px}
-  .level-exp-text{margin-left:auto;font-size:11px;color:#eef3ff;font-weight:600;white-space:nowrap}
-  .exp-bar{height:6px;background:rgba(255,255,255,.28);border-radius:99px;overflow:hidden}
-  .exp-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#fde68a,#fff);
-             width:0;transition:width .5s cubic-bezier(.2,.8,.3,1)}
+  .level-exp-text{margin-left:auto;font-size:11px;color:#fde68a;font-weight:700;white-space:nowrap}
+  .exp-bar{height:6px;background:rgba(255,255,255,.16);border-radius:99px;overflow:hidden}
+  .exp-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#d8a326,#fde68a,#ffd970);
+             box-shadow:0 0 8px rgba(253,224,138,.7);width:0;transition:width .5s cubic-bezier(.2,.8,.3,1)}
   /* 每日任务弹窗 */
   .task-head-row{display:flex;align-items:center;gap:10px;margin-bottom:6px}
   .task-head-row .lv-pill{font-weight:800;color:#fff;border-radius:10px;padding:4px 12px;font-size:14px}
@@ -412,17 +414,24 @@
   .cfg-checks label{display:flex;align-items:center;gap:6px;margin:0;cursor:pointer}
   .cfg-checks input{width:auto;margin:0}
   .empty-library{text-align:center;padding:54px 20px;color:var(--muted);background:#fff;border:1px dashed var(--line);border-radius:14px}
-  .me-card{display:flex;gap:16px;align-items:center;flex-wrap:wrap;background:var(--brand);color:#fff;border-radius:16px;padding:20px 22px}
-  .me-avatar{font-size:40px;width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center}
-  .me-info{flex:1;min-width:160px}
-  .me-info h2{margin:0 0 4px;font-size:20px}
-  .me-info .meta{margin:0 0 6px;opacity:1;color:#eef3ff;font-weight:500}
-  .me-stats .review-kpi span{opacity:.96;font-weight:600;letter-spacing:.3px}
-  .me-display-name{color:#f0f4ff!important;font-weight:500}
-  .me-info .chip{background:rgba(255,255,255,.2);color:#fff;border:none;margin-left:0}
-  .me-stats{display:flex;gap:10px}
-  .me-stats .review-kpi{background:rgba(255,255,255,.16);min-width:104px;padding:10px 14px}
-  .me-stats .review-kpi strong{font-size:22px}
+  .me-card{display:flex;gap:18px;align-items:center;flex-wrap:wrap;color:#1e293b;
+           background:linear-gradient(135deg,#ffffff 0%,#f2f6fc 100%);
+           border:1px solid #e7ecf4;border-radius:18px;padding:24px 26px;
+           box-shadow:0 8px 24px rgba(40,60,110,.08)}
+  .me-avatar{font-size:40px;width:80px;height:80px;border-radius:50%;background:#eef2f8;
+             border:3px solid #fff;box-shadow:0 5px 16px rgba(40,60,110,.16);
+             display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .me-info{flex:1 1 0;min-width:232px}
+  .me-line{display:flex;align-items:baseline;gap:9px;margin:0 0 7px}
+  .me-line .ml{color:#9aa6b8;font-size:13px;min-width:36px;flex-shrink:0}
+  .me-line b{font-size:17px;font-weight:700;color:#0f172a;white-space:nowrap}
+  .me-line span:not(.ml){color:#3b475a;font-size:14px;font-weight:500;white-space:nowrap}
+  .me-info .chip{background:#eef2ff;color:var(--brand);border:none;margin-left:0}
+  .me-stats{display:flex;gap:10px;flex-shrink:0;margin-left:auto}
+  .me-stats .review-kpi{background:#fff;min-width:84px;padding:12px 10px;
+                        border:1px solid #e9edf5;box-shadow:0 3px 12px rgba(40,60,110,.06)}
+  .me-stats .review-kpi strong{font-size:23px;color:#0f172a}
+  .me-stats .review-kpi span{opacity:1;color:#8a94a6;font-weight:500;letter-spacing:.2px}
   .me-section{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-top:16px}
   .me-section h3{margin:0 0 8px;font-size:15px}
   .me-section label{display:block;font-size:13px;color:#4b5163;margin:10px 0 4px}
@@ -438,6 +447,7 @@
     header{padding:12px 18px}.layout{display:block}.layout nav{display:none}main{padding:18px}
     .panel,.review-shell{padding:20px}.chart-grid{grid-template-columns:1fr}.chart-box{min-width:0}
     .user-area{margin-left:0}.hrow{justify-content:space-between}.review-hero{align-items:center}
+    .me-card{padding:20px}.me-stats{width:100%;margin-left:0}.me-stats .review-kpi{flex:1}
   }
   @media (max-width:600px){
     body{padding-bottom:72px}header{position:static;padding:12px 16px}.hrow{gap:6px 10px}
@@ -706,9 +716,9 @@
   <div class="me-card">
     <div class="me-avatar" id="me-avatar" title="点击更换头像"></div>
     <div class="me-info">
-      <h2 id="me-username"></h2>
-      <p class="me-display-name" id="me-display-name"></p>
-      <p class="meta" id="me-email"></p>
+      <p class="me-line"><span class="ml">昵称</span><b id="me-username"></b></p>
+      <p class="me-line"><span class="ml">账号</span><span id="me-account"></span></p>
+      <p class="me-line"><span class="ml">邮箱</span><span id="me-email"></span></p>
       <div class="me-level" id="me-level" title="点击查看每日任务与经验规则">
         <span class="level-badge" id="me-level-badge"><b>Lv1</b><small>初识</small></span>
         <div class="level-main">
@@ -1610,8 +1620,7 @@ function renderMe(){
   const D=window.__QUIZ_DATA__;
   paintAllAvatars(currentUser);
   document.getElementById('me-username').textContent=currentUser.display_name||currentUser.username;
-  const dnEl=document.getElementById('me-display-name');
-  dnEl.textContent=currentUser.display_name?('账号：'+currentUser.username):'';
+  document.getElementById('me-account').textContent=currentUser.username;
   document.getElementById('me-email').textContent=currentUser.email||'未绑定邮箱';
   loadLevel();
   const bioEl=document.getElementById('me-bio');
