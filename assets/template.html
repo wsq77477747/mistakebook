@@ -301,6 +301,12 @@
   .auth-actions .btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(47,111,237,.45)}
   .auth-actions .btn-primary:active{transform:translateY(0)}
   .auth-state{font-size:12.5px;min-height:20px;color:var(--muted);margin-top:10px;text-align:center}
+  .field-err{display:flex;align-items:center;gap:5px;color:#dc2626;font-size:12px;font-weight:600;
+             margin:-7px 2px 9px;line-height:1.45}
+  .field-err::before{content:"⚠";font-size:11px}
+  .auth-box input.invalid{border-color:#ef4444!important;background:#fef2f2}
+  @keyframes fieldShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+  .field-err.shake,.auth-box input.shake{animation:fieldShake .38s ease}
   .auth-remember{display:flex;align-items:center;gap:7px;font-size:12.5px;color:#5b6272;margin:11px 2px 2px;cursor:pointer;user-select:none}
   .auth-remember input{width:auto;margin:0;accent-color:var(--brand)}
   .auth-link-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px;min-height:20px;font-size:12.5px}
@@ -973,7 +979,7 @@
           <button type="button" class="btn-plain" id="auth-send-code">发送验证码</button>
         </div>
       </div>
-      <label>邀请码（选填）</label><input id="auth-reg-invite" placeholder="填写好友邀请码，双方每日免费次数各 +10">
+      <label>邀请码（选填）</label><input id="auth-reg-invite" placeholder="没有可留空" autocomplete="off">
       <div class="auth-actions"><button class="btn-primary" id="auth-register">创建账号</button></div>
       <div class="auth-alt">已有账号？<a href="javascript:void(0)" id="auth-goto-login">← 返回登录</a></div>
     </div>
@@ -1146,6 +1152,7 @@ function refreshRegisterCfg(){
   }).catch(()=>{});
 }
 function showAuthView(mode){
+  clearFieldErrors();
   authMode=mode;
   document.getElementById('auth-login-view').hidden=!['login-pass','login-code'].includes(mode);
   document.getElementById('auth-register-view').hidden=(mode!=='register');
@@ -1225,6 +1232,39 @@ function passwordError(password,label){
   return kinds<2?label+'必须包含字母、数字或符号中的至少两种。':'';
 }
 function setAuthState(msg){document.getElementById('auth-state').textContent=msg;}
+/* 字段级错误：显示在对应输入框下方，红字并震动；msg 为空则清除 */
+function _fieldAnchor(input){return input.closest('.code-row')||input;}
+function fieldError(inputId,msg){
+  const input=document.getElementById(inputId);if(!input){setAuthState(msg);return;}
+  const anchor=_fieldAnchor(input);
+  let err=anchor.parentElement.querySelector(':scope > .field-err[data-for="'+inputId+'"]');
+  if(!msg){if(err)err.remove();input.classList.remove('invalid','shake');return;}
+  if(!err){
+    err=document.createElement('div');err.className='field-err';err.dataset.for=inputId;
+    anchor.insertAdjacentElement('afterend',err);
+  }
+  err.textContent=msg;
+  input.classList.add('invalid');
+  input.classList.remove('shake');void input.offsetWidth;input.classList.add('shake');
+  err.classList.remove('shake');void err.offsetWidth;err.classList.add('shake');
+}
+function clearFieldErrors(){
+  document.querySelectorAll('#auth-modal .field-err').forEach(e=>e.remove());
+  document.querySelectorAll('#auth-modal input.invalid,#auth-modal input.shake').forEach(i=>i.classList.remove('invalid','shake'));
+}
+/* 服务器错误尽量定位到字段，无法判断时回到底部状态条 */
+function reportAuthError(message){
+  const m=message||'';
+  const pick=(ids)=>ids.find(id=>{const e=document.getElementById(id);return e&&!e.closest('[hidden]')&&e.offsetParent!==null;});
+  let target=null;
+  if(/验证码/.test(m))target=pick(['auth-reg-code','auth-login-code','auth-reset-code']);
+  else if(/邀请码/.test(m))target='auth-reg-invite';
+  else if(/密码/.test(m))target=pick(['auth-reg-password','auth-password','auth-reset-password','auth-reset-confirm']);
+  else if(/邮箱/.test(m))target=pick(['auth-reg-email','auth-login-email','auth-reset-email']);
+  else if(/用户名|账号/.test(m))target=pick(['auth-reg-username','auth-username']);
+  if(target){fieldError(target,m);setAuthState('');}
+  else setAuthState('❌ '+m);
+}
 async function postAuth(path,payload){
   const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   const j=await r.json().catch(()=>({}));
@@ -1242,22 +1282,23 @@ function beginLoginAccountSelection(j,remember){
   showAuthView('account-select');setAuthState(j.message||'请选择要登录的账号。');
 }
 async function submitLogin(){
+  clearFieldErrors();
   const remember=document.getElementById('auth-remember').checked;
   let payload={remember_me:remember},okMsg='正在登录…';
   if(authMode==='login-code'){
     const email=document.getElementById('auth-login-email').value.trim();
     const code=document.getElementById('auth-login-code').value.trim();
-    if(!email){setAuthState('请填写登录邮箱。');return;}
-    if(!EMAIL_RE.test(email)||email.length>254){setAuthState('邮箱格式不合法，请填写类似 name@example.com 的完整地址。');return;}
-    if(!code){setAuthState('请填写邮箱收到的登录验证码。');return;}
-    if(!/^\d{6}$/.test(code)){setAuthState('登录验证码应为 6 位数字，请检查后重新输入。');return;}
+    if(!email){fieldError('auth-login-email','请填写登录邮箱。');return;}
+    if(!EMAIL_RE.test(email)||email.length>254){fieldError('auth-login-email','邮箱格式不正确，例如 name@example.com');return;}
+    if(!code){fieldError('auth-login-code','请填写收到的验证码。');return;}
+    if(!/^\d{6}$/.test(code)){fieldError('auth-login-code','验证码应为 6 位数字。');return;}
     payload.email=email;payload.email_code=code;
     okMsg='正在通过验证码登录…';
   }else{
     const username=document.getElementById('auth-username').value.trim();
     const password=document.getElementById('auth-password').value;
-    if(!username){setAuthState('请填写账号或邮箱。');return;}
-    if(!password){setAuthState('请填写密码。');return;}
+    if(!username){fieldError('auth-username','请填写账号或邮箱。');return;}
+    if(!password){fieldError('auth-password','请填写密码。');return;}
     payload.username=username;payload.password=password;
   }
   setAuthState(okMsg);
@@ -1265,7 +1306,7 @@ async function submitLogin(){
     const j=await postAuth('/api/auth/login',payload);
     if(j.account_selection_required){beginLoginAccountSelection(j,remember);return;}
     setAuthState('');await enterAccount(j.user,j.level);
-  }catch(e){setAuthState('❌ '+e.message);}
+  }catch(e){reportAuthError(e.message);}
 }
 document.getElementById('auth-login-accounts').addEventListener('click',async e=>{
   const btn=e.target.closest('[data-account-id]');if(!btn||!pendingAuthFlow)return;
@@ -1276,36 +1317,37 @@ document.getElementById('auth-login-accounts').addEventListener('click',async e=
   }catch(err){setAuthState('❌ '+err.message);}
 });
 async function submitRegister(){
+  clearFieldErrors();
   const username=document.getElementById('auth-reg-username').value.trim();
   const password=document.getElementById('auth-reg-password').value;
   const email=document.getElementById('auth-reg-email').value.trim();
-  if(!username){setAuthState('请填写用户名。');return;}
-  if(username.length<3){setAuthState('用户名至少需要 3 个字符。');return;}
-  const pwdError=passwordError(password,'密码');if(pwdError){setAuthState(pwdError);return;}
-  if(!email){setAuthState('请填写邮箱地址。');return;}
-  if(!EMAIL_RE.test(email)||email.length>254){setAuthState('邮箱格式不合法，请填写类似 name@example.com 的完整地址。');return;}
+  if(!username){fieldError('auth-reg-username','请填写用户名。');return;}
+  if(username.length<3){fieldError('auth-reg-username','用户名至少需要 3 个字符。');return;}
+  const pwdError=passwordError(password,'密码');if(pwdError){fieldError('auth-reg-password',pwdError);return;}
+  if(!email){fieldError('auth-reg-email','请填写邮箱地址。');return;}
+  if(!EMAIL_RE.test(email)||email.length>254){fieldError('auth-reg-email','邮箱格式不正确，例如 name@example.com');return;}
   const payload={username,password,email,remember_me:document.getElementById('auth-remember').checked};
   const invite=document.getElementById('auth-reg-invite').value.trim();
   if(invite)payload.invite_code=invite;
   if(registerCfg.email_code_required){
     const code=document.getElementById('auth-reg-code').value.trim();
-    if(!code){setAuthState('请先发送并填写注册验证码。');return;}
-    if(!/^\d{6}$/.test(code)){setAuthState('注册验证码应为 6 位数字，请检查后重新输入。');return;}
+    if(!code){fieldError('auth-reg-code','请填写注册验证码。');return;}
+    if(!/^\d{6}$/.test(code)){fieldError('auth-reg-code','验证码应为 6 位数字。');return;}
     payload.email_code=code;
   }
   setAuthState('正在创建账号…');
   try{
     const j=await postAuth('/api/auth/register',payload);
     setAuthState(j.imported?'已导入 '+j.imported+' 道本地错题。':'');await enterAccount(j.user,j.level);
-  }catch(e){setAuthState('❌ '+e.message);}
+  }catch(e){reportAuthError(e.message);}
 }
 async function sendCode(purpose){
   const inputIds={register:'auth-reg-email',login:'auth-login-email',reset:'auth-reset-email'};
   const btnIds={register:'auth-send-code',login:'auth-login-send',reset:'auth-reset-send'};
   const email=document.getElementById(inputIds[purpose]).value.trim();
   const btn=document.getElementById(btnIds[purpose]);
-  if(!email){setAuthState('请先填写邮箱地址。');return;}
-  if(!EMAIL_RE.test(email)||email.length>254){setAuthState('邮箱格式不合法，请填写类似 name@example.com 的完整地址。');return;}
+  if(!email){fieldError(inputIds[purpose],'请先填写邮箱地址。');return;}
+  if(!EMAIL_RE.test(email)||email.length>254){fieldError(inputIds[purpose],'邮箱格式不正确，例如 name@example.com');return;}
   btn.disabled=true;btn.textContent='发送中…';
   try{
     const r=await fetch('/api/auth/send_code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,purpose})});
@@ -1316,7 +1358,7 @@ async function sendCode(purpose){
       startCodeCountdown(btn,j.resend_interval_seconds||60);
     }else{
       btn.disabled=false;btn.textContent='发送验证码';
-      setAuthState('❌ '+(j.message||'发送失败，请稍后再试。'));
+      reportAuthError(j.message||'发送失败，请稍后再试。');
     }
   }catch(e){
     btn.disabled=false;btn.textContent='发送验证码';
@@ -1324,27 +1366,28 @@ async function sendCode(purpose){
   }
 }
 async function submitReset(){
+  clearFieldErrors();
   const btn=document.getElementById('auth-reset-next');
   if(pendingAuthFlow&&pendingAuthFlow.purpose==='reset'&&pendingAuthFlow.accountId){
     const password=document.getElementById('auth-reset-password').value;
     const confirm=document.getElementById('auth-reset-confirm').value;
-    const pwdError=passwordError(password,'新密码');if(pwdError){setAuthState(pwdError);return;}
-    if(!confirm){setAuthState('请再次输入新密码。');return;}
-    if(password!==confirm){setAuthState('两次输入的新密码不一致。');return;}
+    const pwdError=passwordError(password,'新密码');if(pwdError){fieldError('auth-reset-password',pwdError);return;}
+    if(!confirm){fieldError('auth-reset-confirm','请再次输入新密码。');return;}
+    if(password!==confirm){fieldError('auth-reset-confirm','两次输入的密码不一致。');return;}
     btn.disabled=true;setAuthState('正在重置密码…');
     try{
       const j=await postAuth('/api/auth/reset_password',{selection_token:pendingAuthFlow.token,account_id:pendingAuthFlow.accountId,new_password:password});
       pendingAuthFlow=null;showAuthView('login-pass');setAuthState('✅ '+j.message);
-    }catch(e){setAuthState('❌ '+e.message);}
+    }catch(e){reportAuthError(e.message);}
     finally{btn.disabled=false;}
     return;
   }
   const email=document.getElementById('auth-reset-email').value.trim();
   const code=document.getElementById('auth-reset-code').value.trim();
-  if(!email){setAuthState('请填写注册邮箱。');return;}
-  if(!EMAIL_RE.test(email)||email.length>254){setAuthState('邮箱格式不合法，请填写类似 name@example.com 的完整地址。');return;}
-  if(!code){setAuthState('请填写邮箱收到的找回密码验证码。');return;}
-  if(!/^\d{6}$/.test(code)){setAuthState('找回密码验证码应为 6 位数字，请检查后重新输入。');return;}
+  if(!email){fieldError('auth-reset-email','请填写注册邮箱。');return;}
+  if(!EMAIL_RE.test(email)||email.length>254){fieldError('auth-reset-email','邮箱格式不正确，例如 name@example.com');return;}
+  if(!code){fieldError('auth-reset-code','请填写找回密码验证码。');return;}
+  if(!/^\d{6}$/.test(code)){fieldError('auth-reset-code','验证码应为 6 位数字。');return;}
   btn.disabled=true;setAuthState('正在验证邮箱…');
   try{
     const j=await postAuth('/api/auth/reset_password',{email:email,email_code:code});
@@ -1359,7 +1402,7 @@ async function submitReset(){
     }
     document.getElementById('auth-reset-password-wrap').hidden=false;
     btn.textContent='重置密码';setAuthState(j.message||'请设置新密码。');
-  }catch(e){setAuthState('❌ '+e.message);}
+  }catch(e){reportAuthError(e.message);}
   finally{btn.disabled=false;}
 }
 document.getElementById('auth-reset-accounts').addEventListener('click',e=>{
@@ -1369,6 +1412,12 @@ document.getElementById('auth-reset-accounts').addEventListener('click',e=>{
   setAuthState('已选择账号，请设置新密码。');
 });
 document.getElementById('auth-login').addEventListener('click',submitLogin);
+document.getElementById('auth-modal').addEventListener('input',e=>{
+  const inp=e.target;if(!inp||inp.tagName!=='INPUT')return;
+  inp.classList.remove('invalid','shake');
+  const a=_fieldAnchor(inp);
+  if(a&&a.parentElement){const err=a.parentElement.querySelector(':scope > .field-err[data-for="'+inp.id+'"]');if(err)err.remove();}
+});
 document.getElementById('auth-register').addEventListener('click',submitRegister);
 document.getElementById('auth-reset-next').addEventListener('click',submitReset);
 document.getElementById('auth-password').addEventListener('keydown',e=>{if(e.key==='Enter')submitLogin();});
