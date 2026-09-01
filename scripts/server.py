@@ -533,6 +533,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._send_json(200, self._my_ai_config_view())
         if path == "/api/notebooks":
             return self._send_json(200, {"notebooks": storage.list_notebooks(self.user["id"])})
+        if path == "/api/notebooks/members":
+            return self._nb_members()
         if path == "/api/friends":
             return self._send_json(200, {
                 "friends": storage.list_friends(self.user["id"]),
@@ -600,6 +602,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._nb_delete()
         if path == "/api/notebooks/move":
             return self._nb_move()
+        if path == "/api/notebooks/share":
+            return self._nb_share()
+        if path == "/api/notebooks/unshare":
+            return self._nb_unshare()
+        if path == "/api/notebooks/member_role":
+            return self._nb_member_role()
         if path == "/api/friends/request":
             return self._friend_request()
         if path == "/api/friends/respond":
@@ -1034,6 +1042,51 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._send_json(404, {"error": "NOT_FOUND", "message": "你们还不是好友。"})
         return self._send_json(200, dict({"ok": True}, **self._friend_view()))
 
+    # ---- 错题本共享协作 ----
+    def _nb_members(self):
+        nb = parse_qs(urlparse(self.path).query).get("notebook_id", [""])[0]
+        try:
+            return self._send_json(200, storage.list_notebook_members(self.user["id"], nb))
+        except KeyError:
+            return self._send_json(404, {"error": "NOT_FOUND", "message": "错题本不存在或你没有访问权限。"})
+
+    def _nb_share(self):
+        body = self._read_body()
+        try:
+            r = storage.share_notebook(
+                self.user["id"], body.get("notebook_id"), body.get("target"),
+                body.get("role", "viewer"))
+        except KeyError:
+            return self._send_json(404, {"error": "NOT_FOUND", "message": "错题本不存在。"})
+        except PermissionError as exc:
+            return self._send_json(403, {"error": "FORBIDDEN", "message": str(exc)})
+        except ValueError as exc:
+            return self._send_json(400, {"error": "NB_FAIL", "message": str(exc)})
+        return self._send_json(200, {"ok": True, **r,
+                                     "notebooks": storage.list_notebooks(self.user["id"]),
+                                     "members": storage.list_notebook_members(self.user["id"], body.get("notebook_id"))})
+
+    def _nb_unshare(self):
+        body = self._read_body()
+        try:
+            storage.unshare_notebook(self.user["id"], body.get("notebook_id"), body.get("user_id"))
+        except KeyError:
+            return self._send_json(404, {"error": "NOT_FOUND", "message": "成员或错题本不存在。"})
+        except PermissionError as exc:
+            return self._send_json(403, {"error": "FORBIDDEN", "message": str(exc)})
+        return self._send_json(200, {"ok": True,
+                                     "notebooks": storage.list_notebooks(self.user["id"]),
+                                     "members": storage.list_notebook_members(self.user["id"], body.get("notebook_id"))})
+
+    def _nb_member_role(self):
+        body = self._read_body()
+        try:
+            storage.set_member_role(self.user["id"], body.get("notebook_id"), body.get("user_id"), body.get("role"))
+        except KeyError:
+            return self._send_json(404, {"error": "NOT_FOUND", "message": "成员或错题本不存在。"})
+        return self._send_json(200, {"ok": True,
+                                     "members": storage.list_notebook_members(self.user["id"], body.get("notebook_id"))})
+
     def _grant(self, action):
         """动作发放经验，失败不影响主流程；返回结果或 None。"""
         try:
@@ -1220,6 +1273,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             version = storage.soft_delete_question(self.user["id"], question_id)
         except KeyError:
             return self._send_json(404, {"error": "NOT_FOUND", "message": "错题不存在。"})
+        except PermissionError as exc:
+            return self._send_json(403, {"error": "FORBIDDEN", "message": str(exc)})
         self._track_event("delete_question", metadata={"question_id": question_id[:36]})
         return self._send_json(200, {"ok": True, "deleted": [question_id], "version": version})
 
@@ -1237,6 +1292,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             version = storage.set_question_status(self.user["id"], question_id, status)
         except KeyError:
             return self._send_json(404, {"error": "NOT_FOUND", "message": "错题不存在。"})
+        except PermissionError as exc:
+            return self._send_json(403, {"error": "FORBIDDEN", "message": str(exc)})
         return self._send_json(200, {"ok": True, "status": status, "version": version})
 
     # ---- 配置测试（不落盘） ----
@@ -1377,7 +1434,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         }
         return self._send_json(200, {"ok": True, "meta": meta, "body": question["body_md"],
                                      "version": question["version"],
-                                     "notebook_id": question.get("notebook_id")})
+                                     "notebook_id": question.get("notebook_id"),
+                                     "is_mine": question.get("is_mine", True),
+                                     "can_edit": question.get("can_edit", True),
+                                     "my_role": question.get("my_role", "owner"),
+                                     "owner_name": question.get("owner_name", "")})
 
     # ---- 编辑错题（更新元信息和正文） ----
     def _edit_quiz(self):
@@ -1405,6 +1466,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             version = storage.update_question(self.user["id"], question_id, data, body.get("version"))
         except RuntimeError:
             return self._send_json(409, {"error": "VERSION_CONFLICT", "message": "该错题已在其他设备更新，请刷新后重试。"})
+        except PermissionError as exc:
+            return self._send_json(403, {"error": "FORBIDDEN", "message": str(exc)})
         self._track_event("edit_question", metadata={"question_id": question_id[:36]})
         return self._send_json(200, {"ok": True, "version": version})
 
@@ -1590,9 +1653,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         record = dict(b)
         record.update({"no": no, "title": title, "cat": cat, "date": date,
                        "times": times, "redates": redates, "body_md": body_md})
-        question_id = storage.create_question(
-            self.user["id"], record, source_file=os.path.relpath(path, ROOT)
-        )
+        try:
+            question_id = storage.create_question(
+                self.user["id"], record, source_file=os.path.relpath(path, ROOT)
+            )
+        except PermissionError as exc:
+            return self._send_json(403, {"error": "FORBIDDEN", "message": str(exc)})
         self._track_event("add_question", metadata={"question_id": question_id[:36], "cat": cat[:30], "has_image": bool(image_rel)})
         add_level = self._grant("add")
 

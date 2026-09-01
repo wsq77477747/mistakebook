@@ -356,6 +356,17 @@ def init_db():
             CREATE UNIQUE INDEX IF NOT EXISTS idx_friend_pair ON friendships(pair_key);
             CREATE INDEX IF NOT EXISTS idx_friend_addressee ON friendships(addressee_id,status);
             CREATE INDEX IF NOT EXISTS idx_friend_requester ON friendships(requester_id,status);
+
+            CREATE TABLE IF NOT EXISTS notebook_members (
+              id TEXT PRIMARY KEY,
+              notebook_id TEXT NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
+              user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              role TEXT NOT NULL DEFAULT 'viewer',
+              created_at TEXT NOT NULL,
+              UNIQUE(notebook_id, user_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_nbmember_user ON notebook_members(user_id);
+            CREATE INDEX IF NOT EXISTS idx_nbmember_nb ON notebook_members(notebook_id);
             """
         )
         user_columns = {row[1] for row in db.execute("PRAGMA table_info(users)")}
@@ -1055,25 +1066,68 @@ def _log_change(db, user_id, entity_id, operation, version, entity_type="questio
     )
 
 
+def _resolve_writable_notebook(db, user_id, nb_id):
+    """写题鉴权：返回 (nb_row, owner_id)。空/非法回退本人默认本；仅查看者抛 PermissionError。"""
+    if not nb_id:
+        dft, _ = _ensure_default_notebook(db, user_id)
+        return db.execute("SELECT * FROM notebooks WHERE id=?", (dft,)).fetchone(), str(user_id)
+    nb = db.execute(
+        "SELECT * FROM notebooks WHERE id=? AND archived_at IS NULL", (str(nb_id),)).fetchone()
+    if not nb:
+        dft, _ = _ensure_default_notebook(db, user_id)
+        return db.execute("SELECT * FROM notebooks WHERE id=?", (dft,)).fetchone(), str(user_id)
+    if nb["user_id"] == str(user_id):
+        return nb, nb["user_id"]
+    if _nb_member_role(db, user_id, nb_id) == "editor":
+        return nb, nb["user_id"]  # 协作编辑：题仍归错题本拥有者
+    raise PermissionError("你对该错题本只有查看权限，不能添加或修改题目。")
+
+
+def _load_question_for_writer(db, user_id, question_id):
+    """按 id 取题并做写权限鉴权；返回题行。"""
+    row = db.execute(
+        "SELECT * FROM questions WHERE id=? AND deleted_at IS NULL", (str(question_id),)).fetchone()
+    if not row:
+        raise KeyError("错题不存在。")
+    if row["user_id"] == str(user_id) or _nb_member_role(db, user_id, row["notebook_id"]) == "editor":
+        return row
+    raise PermissionError("你对该错题只有查看权限。")
+
+
+def _annotate_role(item, row, db, user_id):
+    is_mine = row["user_id"] == str(user_id)
+    role = "owner" if is_mine else _nb_member_role(db, user_id, row["notebook_id"])
+    item.update({
+        "owner_id": row["user_id"],
+        "owner_name": (row["owner_display"] or row["owner_username"])
+        if "owner_username" in row.keys() else "",
+        "owner_username": row["owner_username"] if "owner_username" in row.keys() else "",
+        "owner_avatar": row["owner_avatar"] if "owner_avatar" in row.keys() else "",
+        "my_role": role, "is_mine": is_mine,
+        "can_edit": is_mine or role == "editor",
+    })
+    return item
+
+
 def create_question(user_id, data, source_file=None, question_id=None, notebook_id=None):
     values = _question_values(data)
     question_id = question_id or str(uuid.uuid4())
     now = _now()
     with connect() as db:
-        nb_id = resolve_notebook_id(db, user_id, notebook_id or data.get("notebook_id"))
+        nb_row, owner_id = _resolve_writable_notebook(db, user_id, notebook_id or data.get("notebook_id"))
         db.execute(
             """INSERT INTO questions(
               id,user_id,source_file,no,title,cat,diff,first_wrong_date,source,error_type,status,
               wrong_times,rewrong_dates,summary,body_md,search_text,next_review_at,notebook_id,created_at,updated_at
             ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
-                question_id, user_id, source_file, values["no"], values["title"], values["cat"],
+                question_id, owner_id, source_file, values["no"], values["title"], values["cat"],
                 values["diff"], values["first_wrong_date"], values["source"], values["error_type"],
                 values["status"], values["wrong_times"], values["rewrong_dates"], values["summary"],
-                values["body_md"], values["search_text"], values["next_review_at"], nb_id, now, now,
+                values["body_md"], values["search_text"], values["next_review_at"], nb_row["id"], now, now,
             ),
         )
-        _log_change(db, user_id, question_id, "upsert", 1)
+        _log_change(db, owner_id, question_id, "upsert", 1)
     return question_id
 
 
@@ -1081,32 +1135,28 @@ def update_question(user_id, question_id, data, expected_version=None):
     values = _question_values(data)
     now = _now()
     with connect() as db:
-        current = db.execute(
-            "SELECT version FROM questions WHERE id=? AND user_id=? AND deleted_at IS NULL",
-            (question_id, user_id),
-        ).fetchone()
-        if not current:
-            raise KeyError("错题不存在。")
+        current = _load_question_for_writer(db, user_id, question_id)
         if expected_version is not None and int(expected_version) != current["version"]:
             raise RuntimeError("VERSION_CONFLICT")
         version = current["version"] + 1
         db.execute(
             """UPDATE questions SET no=?,title=?,cat=?,diff=?,first_wrong_date=?,source=?,error_type=?,status=?,
               wrong_times=?,rewrong_dates=?,summary=?,body_md=?,search_text=?,next_review_at=?,version=?,updated_at=?
-              WHERE id=? AND user_id=?""",
+              WHERE id=?""",
             (
                 values["no"], values["title"], values["cat"], values["diff"], values["first_wrong_date"],
                 values["source"], values["error_type"], values["status"], values["wrong_times"],
                 values["rewrong_dates"], values["summary"], values["body_md"], values["search_text"],
-                values["next_review_at"], version, now, question_id, user_id,
+                values["next_review_at"], version, now, question_id,
             ),
         )
-        if data.get("notebook_id"):
+        # 只有错题拥有者本人可以把题移动到自己的其它错题本；协作者不移动归属
+        if data.get("notebook_id") and current["user_id"] == str(user_id):
             db.execute(
                 "UPDATE questions SET notebook_id=? WHERE id=? AND user_id=?",
                 (resolve_notebook_id(db, user_id, data.get("notebook_id")), question_id, user_id),
             )
-        _log_change(db, user_id, question_id, "upsert", version)
+        _log_change(db, current["user_id"], question_id, "upsert", version)
     return version
 
 
@@ -1114,36 +1164,26 @@ def set_question_status(user_id, question_id, status):
     if status not in {"未掌握", "复习中", "已掌握"}:
         raise ValueError("状态不合法。")
     with connect() as db:
-        row = db.execute(
-            "SELECT version FROM questions WHERE id=? AND user_id=? AND deleted_at IS NULL",
-            (question_id, user_id),
-        ).fetchone()
-        if not row:
-            raise KeyError("错题不存在。")
-        version = row["version"] + 1
+        cur = _load_question_for_writer(db, user_id, question_id)
+        version = cur["version"] + 1
         db.execute(
-            "UPDATE questions SET status=?,version=?,updated_at=? WHERE id=? AND user_id=?",
-            (status, version, _now(), question_id, user_id),
+            "UPDATE questions SET status=?,version=?,updated_at=? WHERE id=?",
+            (status, version, _now(), question_id),
         )
-        _log_change(db, user_id, question_id, "upsert", version)
+        _log_change(db, cur["user_id"], question_id, "upsert", version)
     return version
 
 
 def soft_delete_question(user_id, question_id):
     with connect() as db:
-        row = db.execute(
-            "SELECT version FROM questions WHERE id=? AND user_id=? AND deleted_at IS NULL",
-            (question_id, user_id),
-        ).fetchone()
-        if not row:
-            raise KeyError("错题不存在。")
-        version = row["version"] + 1
+        cur = _load_question_for_writer(db, user_id, question_id)
+        version = cur["version"] + 1
         now = _now()
         db.execute(
-            "UPDATE questions SET deleted_at=?,version=?,updated_at=? WHERE id=? AND user_id=?",
-            (now, version, now, question_id, user_id),
+            "UPDATE questions SET deleted_at=?,version=?,updated_at=? WHERE id=?",
+            (now, version, now, question_id),
         )
-        _log_change(db, user_id, question_id, "delete", version)
+        _log_change(db, cur["user_id"], question_id, "delete", version)
     return version
 
 
@@ -1218,18 +1258,80 @@ def resolve_notebook_id(db, user_id, nb_id):
     return default_id
 
 
+def _nb_member_role(db, user_id, nb_id):
+    """用户对某错题本的成员角色（editor/viewer）；非成员返回 None。"""
+    if not nb_id:
+        return None
+    row = db.execute(
+        "SELECT role FROM notebook_members WHERE notebook_id=? AND user_id=?",
+        (str(nb_id), str(user_id)),
+    ).fetchone()
+    return row["role"] if row else None
+
+
+def _notebook_access(db, user_id, nb_id):
+    """返回 (notebook_row, role)；role ∈ owner/editor/viewer；不可见返回 (None,None)。"""
+    nb = db.execute(
+        "SELECT * FROM notebooks WHERE id=? AND archived_at IS NULL", (str(nb_id),)
+    ).fetchone()
+    if not nb:
+        return None, None
+    if nb["user_id"] == str(user_id):
+        return nb, "owner"
+    role = _nb_member_role(db, user_id, nb_id)
+    if role in ("editor", "viewer"):
+        return nb, role
+    return None, None
+
+
+def _visible_notebook_ids(db, user_id):
+    """我拥有的 + 共享给我的错题本 id 集合。"""
+    ids = {r["id"] for r in db.execute(
+        "SELECT id FROM notebooks WHERE user_id=? AND archived_at IS NULL", (str(user_id),)).fetchall()}
+    ids |= {r["notebook_id"] for r in db.execute(
+        "SELECT notebook_id FROM notebook_members WHERE user_id=?", (str(user_id),)).fetchall()}
+    return ids
+
+
 def list_notebooks(user_id):
     with connect() as db:
+        me = db.execute("SELECT username,display_name,avatar FROM users WHERE id=?",
+                        (str(user_id),)).fetchone()
         rows = db.execute(
             "SELECT n.*, (SELECT COUNT(*) FROM questions q WHERE q.notebook_id=n.id "
-            "AND q.deleted_at IS NULL) AS cnt FROM notebooks n "
-            "WHERE n.user_id=? AND n.archived_at IS NULL ORDER BY n.sort_order,n.created_at,n.id",
+            "AND q.deleted_at IS NULL) AS cnt, "
+            "(SELECT COUNT(*) FROM notebook_members m WHERE m.notebook_id=n.id) AS mc "
+            "FROM notebooks n WHERE n.user_id=? AND n.archived_at IS NULL "
+            "ORDER BY n.sort_order,n.created_at,n.id",
             (str(user_id),),
         ).fetchall()
-        return [{
+        out = [{
             "id": r["id"], "name": r["name"], "color": r["color"], "icon": r["icon"],
             "sort_order": r["sort_order"], "count": int(r["cnt"]),
+            "role": "owner", "shared": False, "owner_id": r["user_id"],
+            "owner_name": (me["display_name"] or me["username"]) if me else "",
+            "owner_username": me["username"] if me else "",
+            "owner_avatar": me["avatar"] if me else "", "member_count": int(r["mc"]),
         } for r in rows]
+        shared = db.execute(
+            "SELECT n.*, m.role AS my_role, u.username AS o_un, u.display_name AS o_dn, "
+            "u.avatar AS o_av, (SELECT COUNT(*) FROM questions q WHERE q.notebook_id=n.id "
+            "AND q.deleted_at IS NULL) AS cnt, "
+            "(SELECT COUNT(*) FROM notebook_members mm WHERE mm.notebook_id=n.id) AS mc "
+            "FROM notebook_members m JOIN notebooks n ON n.id=m.notebook_id "
+            "JOIN users u ON u.id=n.user_id WHERE m.user_id=? AND n.archived_at IS NULL "
+            "ORDER BY n.created_at,n.id",
+            (str(user_id),),
+        ).fetchall()
+        for r in shared:
+            out.append({
+                "id": r["id"], "name": r["name"], "color": r["color"], "icon": r["icon"],
+                "sort_order": r["sort_order"], "count": int(r["cnt"]),
+                "role": r["my_role"], "shared": True, "owner_id": r["user_id"],
+                "owner_name": r["o_dn"] or r["o_un"], "owner_username": r["o_un"],
+                "owner_avatar": r["o_av"] or "", "member_count": int(r["mc"]),
+            })
+        return out
 
 
 def create_notebook(user_id, name, color=None, icon=None):
@@ -1329,25 +1431,142 @@ def move_questions(user_id, question_ids, target_notebook_id):
         return cur.rowcount
 
 
-def list_questions(user_id, notebook_id=None):
-    sql = "SELECT * FROM questions WHERE user_id=? AND deleted_at IS NULL"
-    params = [user_id]
-    if notebook_id and notebook_id != "all":
-        sql += " AND notebook_id=?"
-        params.append(notebook_id)
-    sql += " ORDER BY first_wrong_date DESC,title"
+def _find_user_for_share(db, target):
+    target = str(target or "").strip()
+    return db.execute(
+        "SELECT * FROM users WHERE invite_code=? OR username_norm=? OR id=?",
+        (target.upper(), target.casefold(), target),
+    ).fetchone()
+
+
+def share_notebook(user_id, nb_id, target, role="viewer"):
+    """把自己拥有的错题本共享给好友；已是成员则更新角色。"""
+    role = "editor" if str(role) == "editor" else "viewer"
     with connect() as db:
-        rows = db.execute(sql, params).fetchall()
-    return [_row_to_question(row) for row in rows]
+        db.execute("BEGIN IMMEDIATE")
+        nb = _get_owned_notebook(db, user_id, nb_id)
+        if not nb:
+            raise KeyError("错题本不存在。")
+        other = _find_user_for_share(db, target)
+        if not other:
+            raise ValueError("没有找到该用户，需要先添加为好友。")
+        if other["id"] == str(user_id):
+            raise ValueError("不能共享给自己。")
+        if other["id"] not in friend_id_set(user_id):
+            raise ValueError("只能共享给已添加的好友，请先在“我的-好友”中添加。")
+        exist = db.execute(
+            "SELECT id FROM notebook_members WHERE notebook_id=? AND user_id=?",
+            (str(nb_id), other["id"]),
+        ).fetchone()
+        if exist:
+            db.execute("UPDATE notebook_members SET role=? WHERE notebook_id=? AND user_id=?",
+                       (role, str(nb_id), other["id"]))
+            action = "updated"
+        else:
+            db.execute(
+                "INSERT INTO notebook_members(id,notebook_id,user_id,role,created_at) VALUES(?,?,?,?,?)",
+                (str(uuid.uuid4()), str(nb_id), other["id"], role, _now()),
+            )
+            action = "added"
+    return {"ok": True, "action": action}
+
+
+def unshare_notebook(user_id, nb_id, member_user_id):
+    """拥有者移除成员，或成员主动退出共享。"""
+    with connect() as db:
+        nb = db.execute("SELECT user_id FROM notebooks WHERE id=?", (str(nb_id),)).fetchone()
+        if not nb:
+            raise KeyError("错题本不存在。")
+        is_owner = nb["user_id"] == str(user_id)
+        is_self_leave = str(member_user_id) == str(user_id)
+        if not (is_owner or is_self_leave):
+            raise PermissionError("只有错题本拥有者可以移除成员。")
+        cur = db.execute(
+            "DELETE FROM notebook_members WHERE notebook_id=? AND user_id=?",
+            (str(nb_id), str(member_user_id)),
+        )
+        if cur.rowcount == 0:
+            raise KeyError("该成员不在此错题本中。")
+    return {"ok": True}
+
+
+def set_member_role(user_id, nb_id, member_user_id, role):
+    role = "editor" if str(role) == "editor" else "viewer"
+    with connect() as db:
+        if not _get_owned_notebook(db, user_id, nb_id):
+            raise KeyError("错题本不存在。")
+        cur = db.execute(
+            "UPDATE notebook_members SET role=? WHERE notebook_id=? AND user_id=?",
+            (role, str(nb_id), str(member_user_id)),
+        )
+        if cur.rowcount == 0:
+            raise KeyError("该成员不在此错题本中。")
+    return {"ok": True}
+
+
+def list_notebook_members(user_id, nb_id):
+    """拥有者与成员均可查看：返回拥有者 + 成员列表（带等级头衔）。"""
+    with connect() as db:
+        nb, role = _notebook_access(db, user_id, nb_id)
+        if not nb:
+            raise KeyError("错题本不存在或你没有访问权限。")
+        owner = db.execute("SELECT * FROM users WHERE id=?", (nb["user_id"],)).fetchone()
+        rows = db.execute(
+            "SELECT m.role AS m_role,m.created_at,u.* FROM notebook_members m "
+            "JOIN users u ON u.id=m.user_id WHERE m.notebook_id=? ORDER BY m.created_at",
+            (str(nb_id),),
+        ).fetchall()
+        members = []
+        for r in rows:
+            card = _friend_card_from_user(r, user_id, r["m_role"])
+            card["joined_at"] = r["created_at"]
+            members.append(card)
+        owner_card = _friend_card_from_user(owner, user_id, "owner") if owner else None
+        can_manage = role == "owner"
+    return {"owner": owner_card, "members": members, "my_role": role, "can_manage": can_manage}
+
+
+def list_questions(user_id, notebook_id=None):
+    with connect() as db:
+        visible = _visible_notebook_ids(db, user_id)
+        head = ("SELECT q.*,u.username AS owner_username,u.display_name AS owner_display,"
+                "u.avatar AS owner_avatar FROM questions q JOIN users u ON u.id=q.user_id "
+                "WHERE q.deleted_at IS NULL ")
+        params = []
+        if visible:
+            head += "AND (q.user_id=? OR q.notebook_id IN (%s)) " % ",".join("?" * len(visible))
+            params = [str(user_id)] + list(visible)
+        else:
+            head += "AND q.user_id=? "
+            params = [str(user_id)]
+        if notebook_id and notebook_id != "all":
+            if notebook_id not in visible:
+                return []
+            head += "AND q.notebook_id=? "
+            params.append(notebook_id)
+        head += "ORDER BY q.first_wrong_date DESC,q.title"
+        rows = db.execute(head, params).fetchall()
+        out = []
+        for row in rows:
+            item = _row_to_question(row)
+            out.append(_annotate_role(item, row, db, user_id))
+        return out
 
 
 def get_question(user_id, question_id, include_deleted=False):
-    sql = "SELECT * FROM questions WHERE id=? AND user_id=?"
-    if not include_deleted:
-        sql += " AND deleted_at IS NULL"
     with connect() as db:
-        row = db.execute(sql, (question_id, user_id)).fetchone()
-    return _row_to_question(row) if row else None
+        row = db.execute(
+            "SELECT q.*,u.username AS owner_username,u.display_name AS owner_display,"
+            "u.avatar AS owner_avatar FROM questions q JOIN users u ON u.id=q.user_id WHERE q.id=?",
+            (str(question_id),),
+        ).fetchone()
+        if not row or (not include_deleted and row["deleted_at"]):
+            return None
+        is_mine = row["user_id"] == str(user_id)
+        if not is_mine and _nb_member_role(db, user_id, row["notebook_id"]) not in ("editor", "viewer"):
+            return None
+        item = _row_to_question(row)
+        return _annotate_role(item, row, db, user_id)
 
 
 def due_questions(user_id, limit=20, notebook_id=None):

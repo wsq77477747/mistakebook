@@ -594,6 +594,19 @@
 .friend-empty{font-size:12.5px;color:#94a3b8;padding:3px 2px}
 .pp-friend-btn{margin-left:auto;padding:7px 14px;border-radius:9px;border:none;background:var(--brand);color:#fff;font-size:13px;font-weight:600;cursor:pointer}
 .pp-friend-btn.muted{background:#e2e8f0;color:#475569;cursor:default}
+.nb-group-label{font-size:11px;color:#94a3b8;font-weight:700;letter-spacing:.5px;margin:10px 4px 3px}
+.nb-share-tag{font-size:10px;padding:0 6px;border-radius:8px;margin-left:4px;background:#eef2ff;color:var(--brand);font-weight:600}
+.nb-share-tag.editor{background:#ecfdf5;color:#059669}
+.nb-owner-chip{background:#fef3c7!important;color:#b45309!important}
+.nb-share-btn{padding:4px 9px;font-size:12px;border:1px solid var(--line);background:#fff;border-radius:7px;cursor:pointer;color:#334155}
+.nb-share-btn:hover{border-color:var(--brand);color:var(--brand)}
+.share-modal{width:min(580px,94vw);max-height:86vh;overflow-y:auto}
+.share-add{display:flex;gap:8px;margin-top:6px}
+.share-add select{flex:1;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fff}
+.share-member-role{padding:3px 7px;border-radius:7px;border:1px solid var(--line);font-size:12px;background:#fff;cursor:pointer}
+.share-owner-tag{font-size:11px;background:var(--brand-soft);color:var(--brand);border-radius:8px;padding:2px 9px;font-weight:600;white-space:nowrap}
+.share-leave-btn{color:#e11d48!important;border-color:#fecdd3!important}
+button:disabled{opacity:.5;cursor:not-allowed}
 .lv-tag{display:inline-flex;align-items:center;font-size:11px;font-weight:700;color:#fff;padding:1px 8px;border-radius:20px;line-height:1.6;white-space:nowrap;text-shadow:0 1px 1px rgba(0,0,0,.18)}
 .lv-tag.mini{font-size:10px;padding:0 6px;line-height:1.5;font-weight:600}
 .ca-name{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
@@ -1149,6 +1162,28 @@
   </div>
 </div>
 
+<div class="modal-mask" id="share-modal" hidden>
+  <div class="modal share-modal">
+    <div class="mrow" style="justify-content:space-between">
+      <h3 style="margin:0">🤝 共享错题本 · <span id="share-title"></span></h3>
+      <button class="btn-plain" id="share-close">关闭</button>
+    </div>
+    <p class="meta">把错题本共享给好友：<b>仅查看</b>只能浏览；<b>可编辑</b>能一起增删改题目（题目仍归你所有）。共享内容不计入对方的复习计划，刷新后即可看到更新。</p>
+    <h4 class="friend-group-title">成员</h4>
+    <div id="share-members" class="friend-list"></div>
+    <h4 class="friend-group-title">添加好友共享</h4>
+    <div class="share-add">
+      <select id="share-friend-select"></select>
+      <select id="share-role-select" style="flex:0 0 110px">
+        <option value="viewer">仅查看</option>
+        <option value="editor">可编辑</option>
+      </select>
+      <button class="btn-primary" id="share-add-btn" style="flex:0 0 auto">共享</button>
+    </div>
+    <div class="import-state" id="share-state"></div>
+  </div>
+</div>
+
 <script>
 window.__QUIZ_DATA__ = [];
 
@@ -1272,6 +1307,7 @@ let notebooks=[],currentNotebookId='all';
 let friends=[],friendRequests={incoming:[],outgoing:[]};
 const NB_PALETTE=["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#14b8a6","#f97316"];
 function currentData(){const D=window.__QUIZ_DATA__||[];return currentNotebookId==='all'?D:D.filter(q=>q.notebook_id===currentNotebookId);}
+function myData(){return (window.__QUIZ_DATA__||[]).filter(q=>q.is_mine!==false);}
 function nbCount(id){return (window.__QUIZ_DATA__||[]).filter(q=>q.notebook_id===id).length;}
 function deviceId(){
   let id=localStorage.getItem('sqlwb_device_id');
@@ -1607,12 +1643,23 @@ document.getElementById('logout-btn').addEventListener('click',async()=>{
   renderLibrary();switchTab('community');document.getElementById('header-stats').textContent='已安全退出 · 可继续浏览讨论室';
 });
 
+function nbItemHtml(n){
+  const tag=n.shared?'<span class="nb-share-tag '+esc(n.role)+'" title="来自 '+esc(n.owner_name||'')+' 的共享">'+(n.role==='editor'?'可编辑':'只读')+'</span>':'';
+  return '<div class="nb-item'+(n.id===currentNotebookId?' active':'')+'" data-nb="'+esc(n.id)+'" title="'+(n.shared?('共享自 '+esc(n.owner_name||'')):'')+'"><span class="nb-dot" style="background:'+esc(n.color)+'"></span>'+esc(n.icon||'📘')+' '+esc(n.name)+tag+'<span class="cnt">'+nbCount(n.id)+' 题</span></div>';
+}
+function currentNb(){return notebooks.find(n=>n.id===currentNotebookId);}
+function updateSharedGuards(){
+  const nb=currentNb();const ro=!!(nb&&nb.shared&&nb.role==='viewer');
+  ['list-import-file','list-import-folder','list-ai-import'].forEach(id=>{const b=document.getElementById(id);if(b){b.disabled=ro;b.title=ro?'该共享错题本仅可查看，不能添加题目':'';}});
+}
 function renderNotebookNav(){
   const box=document.getElementById('nav-notebooks');if(!box)return;
   const total=(window.__QUIZ_DATA__||[]).length;
+  const mine=notebooks.filter(n=>!n.shared),shared=notebooks.filter(n=>n.shared);
   let html='<div class="nb-item all-item'+(currentNotebookId==='all'?' active':'')+'" data-nb="all"><span class="nb-dot"></span>全部错题<span class="cnt">'+total+' 题</span></div>';
-  html+=notebooks.map(n=>'<div class="nb-item'+(n.id===currentNotebookId?' active':'')+'" data-nb="'+esc(n.id)+'"><span class="nb-dot" style="background:'+esc(n.color)+'"></span>'+esc(n.icon||'📘')+' '+esc(n.name)+'<span class="cnt">'+nbCount(n.id)+' 题</span></div>').join('');
-  box.innerHTML=html;fillEditNotebookSelect();
+  if(mine.length)html+='<div class="nb-group-label">我的错题本</div>'+mine.map(nbItemHtml).join('');
+  if(shared.length)html+='<div class="nb-group-label">🤝 共享给我</div>'+shared.map(nbItemHtml).join('');
+  box.innerHTML=html;fillEditNotebookSelect();updateSharedGuards();
 }
 function fillEditNotebookSelect(selVal){
   const sel=document.getElementById('edit-notebook');if(!sel)return;
@@ -1645,13 +1692,21 @@ function renderLibrary(){
   filter.innerHTML=['全部'].concat(cats).map(c=>'<button class="'+(c===activeCategory?'active':'')+'" data-category="'+esc(c)+'">'+esc(c)+(c==='全部'?'':' · '+groups[c].length)+'</button>').join('');
   const visibleCats=activeCategory==='全部'?cats:cats.filter(c=>c===activeCategory);
   document.getElementById('question-list').innerHTML=visibleCats.length?visibleCats.map(c=>
-    '<section class="cat" id="cat-'+encodeURIComponent(c)+'"><h2>'+esc(c)+' <span class="cnt-badge">'+groups[c].length+' 题</span></h2>'+groups[c].map(q=>
-      '<article class="qcard" id="q-'+q.id+'" data-file="'+q.id+'"><div class="qhead"><span class="badge">'+esc(q.no)+'</span><h3>'+esc(q.title)+'</h3><div class="qcard-actions">'+
-      '<button class="qedit" data-file="'+q.id+'" title="编辑此题" aria-label="编辑此题"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button>'+
-      '<button class="qdel" data-file="'+q.id+'" title="删除此题" aria-label="删除此题"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg></button></div></div><div class="qmeta">'+
-      '<span class="chip diff-'+esc(q.diff)+'">'+esc(q.diff)+'</span><span class="chip type">'+esc(q.errtype)+'</span><span class="chip status status-clickable" data-file="'+q.id+'" data-status="'+esc(q.status)+'" title="点击更新掌握状态">'+esc(q.status)+'</span><span class="chip">'+esc(q.date)+'</span><span class="chip">'+esc(q.src)+'</span></div>'+
-      (q.summary?'<div class="summary">💡 一句话错因：'+esc(q.summary)+'</div>':'')+'<details><summary>查看题目 / 错因 / 解析详情</summary>'+q.body_html+'</details></article>'
-    ).join('')+'</section>').join(''):'<div class="empty-library">还没有错题。点击右下角 AI 助手录入第一道题。</div>';
+    '<section class="cat" id="cat-'+encodeURIComponent(c)+'"><h2>'+esc(c)+' <span class="cnt-badge">'+groups[c].length+' 题</span></h2>'+groups[c].map(questionCardHtml).join('')+'</section>'
+  ).join(''):'<div class="empty-library">还没有错题。点击右下角 AI 助手录入第一道题。</div>';
+}
+function questionCardHtml(q){
+  const canEdit=q.can_edit!==false;
+  const actions=canEdit?
+    '<button class="qedit" data-file="'+q.id+'" title="编辑此题" aria-label="编辑此题"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button>'+
+    '<button class="qdel" data-file="'+q.id+'" title="删除此题" aria-label="删除此题"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg></button>':'';
+  const statusChip=canEdit?
+    '<span class="chip status status-clickable" data-file="'+q.id+'" data-status="'+esc(q.status)+'" title="点击更新掌握状态">'+esc(q.status)+'</span>'
+    :'<span class="chip status" title="共享内容为只读">'+esc(q.status)+'</span>';
+  const ownerChip=q.is_mine===false?'<span class="chip nb-owner-chip" title="来自 '+esc(q.owner_name||'')+' 的共享错题本">🤝 '+esc(q.owner_name||'共享')+'</span>':'';
+  return '<article class="qcard" id="q-'+q.id+'" data-file="'+q.id+'"><div class="qhead"><span class="badge">'+esc(q.no)+'</span><h3>'+esc(q.title)+'</h3><div class="qcard-actions">'+actions+'</div></div><div class="qmeta">'+
+    '<span class="chip diff-'+esc(q.diff)+'">'+esc(q.diff)+'</span><span class="chip type">'+esc(q.errtype)+'</span>'+statusChip+'<span class="chip">'+esc(q.date)+'</span><span class="chip">'+esc(q.src)+'</span>'+ownerChip+'</div>'+
+    (q.summary?'<div class="summary">💡 一句话错因：'+esc(q.summary)+'</div>':'')+'<details><summary>查看题目 / 错因 / 解析详情</summary>'+q.body_html+'</details></article>';
 }
 async function loadQuestions(){
   const j=await apiJson('/api/questions');window.__QUIZ_DATA__=j.questions||[];renderNotebookNav();renderLibrary();
@@ -1671,11 +1726,14 @@ function nbStateMsg(t){document.getElementById('nb-state').textContent=t||'';}
 function openNbManager(){renderNbManager();nbStateMsg('');document.getElementById('nb-modal').hidden=false;document.getElementById('nb-new-name').focus();}
 function renderNbManager(){
   const box=document.getElementById('nb-list');
-  box.innerHTML=notebooks.map(n=>
+  const mine=notebooks.filter(n=>!n.shared);
+  box.innerHTML=mine.map(n=>
     '<div class="nb-row" data-nb="'+esc(n.id)+'">'+
     '<button type="button" class="nb-dot-btn" data-act="color" title="点击切换颜色" style="background:'+esc(n.color)+'"></button>'+
     '<input value="'+esc(n.name)+'" maxlength="30" data-act="name" aria-label="错题本名称">'+
-    '<button type="button" class="nb-del" data-act="del">删除</button></div>').join('');
+    '<button type="button" class="nb-share-btn" data-act="share" title="共享给好友">🤝 共享</button>'+
+    '<button type="button" class="nb-del" data-act="del">删除</button></div>').join('')
+    || '<div class="friend-empty">暂无自己的错题本。</div>';
 }
 async function nbCreate(){
   const inp=document.getElementById('nb-new-name'),name=inp.value.trim();
@@ -1695,9 +1753,11 @@ document.getElementById('nb-list').addEventListener('click',async e=>{
     const cur=notebooks.find(n=>n.id===id);const idx=NB_PALETTE.indexOf(cur?cur.color:'');
     try{await nbApi('/api/notebooks/update',{id,color:NB_PALETTE[(idx+1+NB_PALETTE.length)%NB_PALETTE.length]});}
     catch(err){nbStateMsg('❌ '+err.message);}
+  }else if(act==='share'){
+    document.getElementById('nb-modal').hidden=true;openShareModal(id);
   }else if(act==='del'){
     const cur=notebooks.find(n=>n.id===id);if(!cur)return;
-    if(!confirm('确定删除错题本「'+cur.name+'」吗？（本内还有题时无法删除）'))return;
+    if(!confirm('确定删除错题本「'+cur.name+'」吗？（本内还有题时无法删除，共享关系也会解除）'))return;
     try{await nbApi('/api/notebooks/delete',{id});nbStateMsg('✅ 已删除。');}
     catch(err){nbStateMsg('❌ '+err.message);}
   }
@@ -1827,6 +1887,85 @@ document.getElementById('community-list').addEventListener('click',async e=>{
     }
   }catch(err){if(err.name!=='AbortError'&&err.message!=='AUTH_REQUIRED')alert(err.message);}
 });
+/* ================= 错题本共享 ================= */
+let currentShareNb=null;
+async function openShareModal(nbId){
+  currentShareNb=nbId;
+  const nb=notebooks.find(n=>n.id===nbId);
+  document.getElementById('share-title').textContent=nb?nb.name:'';
+  document.getElementById('share-state').textContent='';
+  document.getElementById('share-modal').hidden=false;
+  await loadShareMembers();
+}
+async function loadShareMembers(){
+  if(!currentShareNb)return;
+  let j;
+  try{j=await apiJson('/api/notebooks/members?notebook_id='+encodeURIComponent(currentShareNb));}
+  catch(e){document.getElementById('share-members').innerHTML='<div class="friend-empty">'+esc(e.message)+'</div>';return;}
+  const canManage=j.can_manage,myId=currentUser?currentUser.id:null;
+  let html='';
+  if(j.owner){
+    html+='<div class="friend-row">'+communityAvatar(j.owner)+
+      '<div class="fr-info"><div class="fr-name">'+esc(communityUserName(j.owner))+lvBadge(j.owner,true)+'</div><div class="fr-sub">@'+esc(j.owner.username)+' · 错题本拥有者</div></div><span class="share-owner-tag">拥有者</span></div>';
+  }
+  html+=(j.members||[]).map(m=>{
+    let right='';
+    if(canManage){
+      right='<select class="share-member-role" data-uid="'+esc(m.id)+'"><option value="viewer"'+(m.relation==='viewer'?' selected':'')+'>仅查看</option><option value="editor"'+(m.relation==='editor'?' selected':'')+'>可编辑</option></select><button class="nb-share-btn share-leave-btn" data-act="kick" data-uid="'+esc(m.id)+'">移除</button>';
+    }else if(m.id===myId){
+      right='<span class="share-owner-tag">'+(m.relation==='editor'?'我·可编辑':'我·只读')+'</span><button class="nb-share-btn share-leave-btn" data-act="leave">退出共享</button>';
+    }else{
+      right='<span class="share-owner-tag">'+(m.relation==='editor'?'可编辑':'仅查看')+'</span>';
+    }
+    return '<div class="friend-row">'+communityAvatar(m)+'<div class="fr-info"><div class="fr-name">'+esc(communityUserName(m))+lvBadge(m,true)+'</div><div class="fr-sub">@'+esc(m.username)+'</div></div><div class="fr-actions">'+right+'</div></div>';
+  }).join('');
+  document.getElementById('share-members').innerHTML=html||'<div class="friend-empty">还没有共享给任何好友，在下方选择好友添加。</div>';
+  const memberIds=new Set((j.members||[]).map(m=>m.id));
+  if(j.owner)memberIds.add(j.owner.id);
+  const candidates=friends.filter(f=>!memberIds.has(f.id));
+  const sel=document.getElementById('share-friend-select');
+  sel.innerHTML=candidates.length?candidates.map(f=>'<option value="'+esc(f.id)+'">'+esc(communityUserName(f))+'（@'+esc(f.username)+'）</option>').join(''):'<option value="">（暂无可共享的好友，请先添加好友）</option>';
+  sel.disabled=!canManage||!candidates.length;
+  document.getElementById('share-role-select').disabled=!canManage;
+  document.getElementById('share-add-btn').disabled=!canManage||!candidates.length;
+}
+function shareMsg(t){document.getElementById('share-state').textContent=t||'';}
+document.getElementById('share-close').addEventListener('click',()=>{document.getElementById('share-modal').hidden=true;});
+document.getElementById('share-modal').addEventListener('click',e=>{if(e.target.id==='share-modal')e.target.hidden=true;});
+document.getElementById('share-add-btn').addEventListener('click',async()=>{
+  const uid=document.getElementById('share-friend-select').value;
+  if(!uid||!currentShareNb)return;
+  const role=document.getElementById('share-role-select').value;
+  try{
+    await apiJson('/api/notebooks/share',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({notebook_id:currentShareNb,target:uid,role})});
+    await loadShareMembers();await loadNotebooks();shareMsg('✅ 已共享给该好友。');
+  }catch(e){shareMsg('❌ '+e.message);}
+});
+document.getElementById('share-members').addEventListener('change',async e=>{
+  const s=e.target.closest('.share-member-role');if(!s)return;
+  try{
+    await apiJson('/api/notebooks/member_role',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({notebook_id:currentShareNb,user_id:s.dataset.uid,role:s.value})});
+    shareMsg('✅ 权限已更新。');
+  }catch(err){shareMsg('❌ '+err.message);loadShareMembers();}
+});
+document.getElementById('share-members').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-act]');if(!b)return;
+  try{
+    if(b.dataset.act==='kick'){
+      if(!confirm('确定移除该成员吗？对方将看不到此错题本。'))return;
+      await apiJson('/api/notebooks/unshare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({notebook_id:currentShareNb,user_id:b.dataset.uid})});
+      shareMsg('已移除成员。');await loadShareMembers();await loadNotebooks();
+    }
+    if(b.dataset.act==='leave'){
+      if(!confirm('确定退出这个共享错题本吗？'))return;
+      await apiJson('/api/notebooks/unshare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({notebook_id:currentShareNb,user_id:currentUser.id})});
+      document.getElementById('share-modal').hidden=true;
+      if(currentNotebookId===currentShareNb)selectNotebook('all');
+      await loadNotebooks();
+    }
+  }catch(err){shareMsg('❌ '+err.message);}
+});
+
 /* ================= 好友 ================= */
 function friendRowHtml(u, mode){
   const actions={
@@ -1983,7 +2122,7 @@ function switchTab(name){
 }
 function renderMe(){
   if(!currentUser)return;
-  const D=window.__QUIZ_DATA__;
+  const D=myData();
   renderFriendBadgeAndPreview();
   paintAllAvatars(currentUser);
   document.getElementById('me-username').textContent=currentUser.display_name||currentUser.username;
@@ -2416,7 +2555,7 @@ function sortedKV(m){return Object.entries(m).sort((a,b)=>a[0]<b[0]?-1:1);}
 function sortedByVal(m){return Object.entries(m).sort((a,b)=>b[1]-a[1]);}
 
 function renderTrend(){
-  const D=currentData();
+  const D=myData();
   // 月度数据
   const newM=countBy(D,q=>monthKey(q.date));
   const freqM={};
@@ -2732,6 +2871,8 @@ function fillPreview(d){
   setInput('pv-body',d.body_md||'');
 }
 function collectPreview(){
+  const __nb=currentNb();
+  if(__nb&&__nb.shared&&__nb.role==='viewer'){addState('该共享错题本仅可查看，不能新增题目。','err');return null;}
   return {
     notebook_id:currentNotebookId==='all'?null:currentNotebookId,
     no:document.getElementById('pv-no').value.trim(),
@@ -2750,6 +2891,7 @@ function collectPreview(){
 }
 async function saveQuestion(){
   const d=collectPreview();
+  if(!d)return;
   if(!d.title||!d.cat){addState('标题和知识点不能为空。','err');return;}
   addState('⏳ 正在写入并重建索引…');
   document.getElementById('add-save').disabled=true;
@@ -3067,6 +3209,8 @@ function openEditModal(file){
       document.getElementById('edit-form').style.display='block';
       document.getElementById('edit-version').value=res.version||'';
       fillEditNotebookSelect(res.notebook_id);
+      const __es=document.getElementById('edit-notebook');
+      if(__es)__es.disabled=(res.is_mine===false);
       var m=res.meta||{};
       document.getElementById('edit-no').value=m['题号']||'';
       document.getElementById('edit-title').value=m['标题']||'';
