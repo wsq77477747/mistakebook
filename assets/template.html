@@ -571,6 +571,19 @@
 .community-compose,.community-post{background:#fff;border:1px solid var(--line);border-radius:15px;padding:16px;margin-bottom:14px}.community-compose textarea{width:100%;min-height:88px;resize:vertical;border:1px solid var(--line);border-radius:10px;padding:11px;font:inherit;outline:none}.community-compose textarea:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
 .community-compose-foot{display:flex;align-items:center;justify-content:space-between;margin-top:8px;color:var(--muted);font-size:12px}.community-author{display:flex;align-items:center;gap:10px;cursor:pointer}.community-author .avatar{width:38px;height:38px}.community-author b{display:block}.community-author small{color:var(--muted)}.community-content{white-space:pre-wrap;overflow-wrap:anywhere;margin:13px 0;line-height:1.7}.community-actions{display:flex;gap:8px;border-top:1px solid #f0f2f6;padding-top:10px}.community-actions button{border:0;background:#f7f8fb;color:#526074;border-radius:8px;padding:7px 11px;cursor:pointer}.community-actions button.active{background:#fee2e2;color:#dc2626}.community-comments{margin-top:10px}.community-comment{display:flex;gap:8px;background:#f8fafc;border-radius:9px;padding:8px 10px;margin-top:7px;font-size:13px}.community-comment b{cursor:pointer}.community-comment-form{display:flex;gap:8px;margin-top:9px}.community-comment-form input{flex:1;border:1px solid var(--line);border-radius:8px;padding:8px 10px}.community-empty{text-align:center;color:var(--muted);padding:42px 15px}
 .account-list{display:grid;gap:9px;margin:12px 0}.account-choice{width:100%;display:flex;align-items:center;gap:10px;text-align:left;background:#f8fafc;border:1px solid var(--line);border-radius:11px;padding:10px;cursor:pointer}.account-choice:hover,.account-choice.selected{border-color:var(--brand);background:var(--brand-soft)}.account-choice .avatar{width:38px;height:38px}.auth-link-row{display:flex;justify-content:space-between;gap:12px;margin-top:10px;font-size:12.5px}.auth-link-row a{color:var(--brand);text-decoration:none}.public-profile-head{display:flex;gap:14px;align-items:center}.public-profile-head .avatar{width:64px;height:64px}.public-profile-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:15px 0}.public-profile-stats div{text-align:center;background:#f8fafc;border-radius:10px;padding:9px}.public-profile-stats strong{display:block;font-size:20px;color:var(--brand)}
+.lv-tag{display:inline-flex;align-items:center;font-size:11px;font-weight:700;color:#fff;padding:1px 8px;border-radius:20px;line-height:1.6;white-space:nowrap;text-shadow:0 1px 1px rgba(0,0,0,.18)}
+.lv-tag.mini{font-size:10px;padding:0 6px;line-height:1.5;font-weight:600}
+.ca-name{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.list-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.list-toolbar input{flex:1 1 240px;width:auto}
+.list-import{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
+.list-import button{padding:8px 14px;border-radius:9px;font-size:13.5px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:#fff;color:#334155;transition:.15s}
+.list-import button:hover{border-color:var(--brand);color:var(--brand)}
+.list-import .btn-primary{background:var(--brand);color:#fff;border-color:var(--brand);box-shadow:0 3px 10px var(--brand-soft)}
+.list-import .btn-primary:hover{color:#fff;filter:brightness(1.05)}
+.pp-posts{margin-top:4px;display:grid;gap:9px;max-height:330px;overflow:auto}
+.pp-post{background:#f8fafc;border:1px solid #eef1f6;border-radius:11px;padding:10px 12px;font-size:13px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;color:#334155}
+.pp-post .pp-time{display:block;color:#94a3b8;font-size:11.5px;margin-top:5px}
 @media(max-width:700px){.community-head{align-items:flex-start;flex-direction:column}.community-actions{justify-content:space-between}.community-actions button{padding:7px 8px}.welcome-card{padding:22px}}
 </style>
 </head>
@@ -632,7 +645,11 @@
     <div id="nav-questions"></div>
   </nav>
   <main id="all">
-    <div class="list-toolbar"><input id="list-filter" placeholder="🔍 快速过滤当前列表（题号/标题/知识点/错因）…"></div>
+    <div class="list-toolbar"><input id="list-filter" placeholder="🔍 快速过滤当前列表（题号/标题/知识点/错因）…"><div class="list-import">
+      <button id="list-import-file" type="button">📁 导入文件</button>
+      <button id="list-import-folder" type="button">📂 导入文件夹</button>
+      <button id="list-ai-import" type="button" class="btn-primary">🤖 AI识别导入</button>
+    </div></div>
     <div class="category-filter" id="category-filter"></div>
     <div id="question-list"><div class="empty-library">登录后加载你的错题库。</div></div>
   </main>
@@ -1582,14 +1599,19 @@ document.querySelectorAll('.rating-btn').forEach(btn=>btn.addEventListener('clic
 /* ================= 讨论室 ================= */
 function communityUserName(u){return (u&&u.display_name)||(u&&u.username)||'用户';}
 function communityAvatar(u){return '<img class="avatar" src="'+esc(userAvatarSrc(u))+'" alt="">';}
+function lvBadge(a,mini){
+  if(!a||!a.level)return '';
+  const c1=a.color1||'#b08d57',c2=a.color2||'#d4af7a';
+  return '<span class="lv-tag'+(mini?' mini':'')+'" style="background:linear-gradient(135deg,'+c1+','+c2+')" title="'+esc(a.tier||'')+'">Lv'+a.level+' '+esc(a.title||'')+'</span>';
+}
 function communityTime(s){try{return new Date(s).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return String(s||'');}}
 function renderCommunity(posts){
   const list=document.getElementById('community-list');
   if(!posts.length){list.innerHTML='<div class="community-empty">还没有帖子，来发布第一条讨论吧。</div>';return;}
   list.innerHTML=posts.map(p=>{
-    const comments=(p.comments||[]).map(c=>'<div class="community-comment"><span><b data-user-id="'+esc(c.author.id)+'">'+esc(communityUserName(c.author))+'</b>：'+esc(c.content)+'</span></div>').join('');
+    const comments=(p.comments||[]).map(c=>'<div class="community-comment"><span><b data-user-id="'+esc(c.author.id)+'">'+esc(communityUserName(c.author))+'</b>'+lvBadge(c.author,true)+'：'+esc(c.content)+'</span></div>').join('');
     return '<article class="community-post" data-post-id="'+esc(p.id)+'">'+
-      '<div class="community-author" data-user-id="'+esc(p.author.id)+'">'+communityAvatar(p.author)+'<span><b>'+esc(communityUserName(p.author))+'</b><small>@'+esc(p.author.username)+' · '+esc(communityTime(p.created_at))+'</small></span></div>'+
+      '<div class="community-author" data-user-id="'+esc(p.author.id)+'">'+communityAvatar(p.author)+'<span><div class="ca-name"><b>'+esc(communityUserName(p.author))+'</b>'+lvBadge(p.author)+'</div><small>@'+esc(p.author.username)+' · '+esc(communityTime(p.created_at))+'</small></span></div>'+
       '<div class="community-content">'+esc(p.content)+'</div><div class="community-actions">'+
       '<button data-action="like" class="'+(p.liked?'active':'')+'">'+(p.liked?'♥':'♡')+' '+p.like_count+'</button>'+
       '<button data-action="comment">💬 '+p.comment_count+'</button><button data-action="share">↗ '+p.share_count+'</button></div>'+
@@ -1631,7 +1653,8 @@ async function openCommunityProfile(userId){
   try{
     const r=await fetch('/api/community/profile?id='+encodeURIComponent(userId)),j=await r.json();if(!r.ok)throw new Error(j.message||'读取失败');
     const p=j.profile,u=p.user;
-    document.getElementById('public-profile-body').innerHTML='<div class="public-profile-head">'+communityAvatar(u)+'<div><h3 style="margin:0">'+esc(communityUserName(u))+'</h3><div class="meta">@'+esc(u.username)+'</div></div></div><p>'+esc(u.bio||'这个用户还没有填写简介。')+'</p><div class="public-profile-stats"><div><strong>'+p.post_count+'</strong>帖子</div><div><strong>'+p.comment_count+'</strong>评论</div><div><strong>'+p.received_likes+'</strong>获赞</div></div>';
+    const ppPosts=(p.posts||[]).map(q=>'<div class="pp-post">'+esc(q.content)+'<span class="pp-time">'+esc(communityTime(q.created_at))+' · ♥ '+q.like_count+' · 💬 '+q.comment_count+'</span></div>').join('');
+    document.getElementById('public-profile-body').innerHTML='<div class="public-profile-head">'+communityAvatar(u)+'<div style="flex:1"><div class="ca-name"><h3 style="margin:0">'+esc(communityUserName(u))+'</h3>'+lvBadge(u)+'</div><div class="meta">@'+esc(u.username)+'</div></div></div><p>'+esc(u.bio||'这个用户还没有填写简介。')+'</p><div class="public-profile-stats"><div><strong>'+p.post_count+'</strong>帖子</div><div><strong>'+p.comment_count+'</strong>评论</div><div><strong>'+p.received_likes+'</strong>获赞</div></div><h4 style="margin:4px 0 8px;font-size:14px;color:#1e293b">TA 的发帖</h4>'+(ppPosts?'<div class="pp-posts">'+ppPosts+'</div>':'<div class="meta">还没有发布过帖子。</div>');
     document.getElementById('public-profile-modal').hidden=false;
   }catch(e){alert(e.message);}
 }
@@ -1845,6 +1868,10 @@ async function runImport(fileList){
 }
 document.getElementById('me-import-btn').addEventListener('click',()=>document.getElementById('import-files').click());
 document.getElementById('me-import-folder').addEventListener('click',()=>document.getElementById('import-folder').click());
+function listImportGuard(){if(!currentUser){showAuth('导入错题需要先登录。');return false;}return true;}
+document.getElementById('list-import-file').addEventListener('click',()=>{if(listImportGuard())document.getElementById('import-files').click();});
+document.getElementById('list-import-folder').addEventListener('click',()=>{if(listImportGuard())document.getElementById('import-folder').click();});
+document.getElementById('list-ai-import').addEventListener('click',()=>{if(listImportGuard())document.getElementById('me-ai-import').click();});
 document.getElementById('import-files').addEventListener('change',e=>{const fl=e.target.files;e.target.value='';if(fl.length)runImport(fl);});
 document.getElementById('import-folder').addEventListener('change',e=>{const fl=e.target.files;e.target.value='';if(fl.length)runImport(fl);});
 document.getElementById('me-ai-import').addEventListener('click',()=>{

@@ -1390,12 +1390,17 @@ def import_legacy_questions(user_id):
 # ==================== 用户行为分析 ====================
 
 def _community_user(row):
+    keys = row.keys()
+    exp = int(row["exp"]) if "exp" in keys and row["exp"] is not None else 0
+    lv = level_from_exp(exp)
     return {
         "id": row["author_id"],
         "username": row["username"],
         "display_name": row["display_name"],
         "avatar": row["avatar"],
         "bio": row["bio"],
+        "level": lv["level"], "title": lv["title"], "tier": lv["tier"],
+        "color1": lv["color1"], "color2": lv["color2"],
     }
 
 
@@ -1413,7 +1418,7 @@ def list_community_posts(viewer_id="", limit=30, author_id=""):
     with connect() as db:
         rows = db.execute(
             """SELECT p.id,p.user_id AS author_id,p.content,p.created_at,p.updated_at,
-                      u.username,u.display_name,u.avatar,u.bio,
+                      u.username,u.display_name,u.avatar,u.bio,u.exp,
                       (SELECT COUNT(*) FROM community_likes l WHERE l.post_id=p.id) AS like_count,
                       (SELECT COUNT(*) FROM community_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count,
                       (SELECT COUNT(*) FROM community_shares s WHERE s.post_id=p.id) AS share_count,
@@ -1426,7 +1431,7 @@ def list_community_posts(viewer_id="", limit=30, author_id=""):
         for row in rows:
             comments = db.execute(
                 """SELECT c.id,c.content,c.created_at,u.id AS author_id,
-                          u.username,u.display_name,u.avatar,u.bio
+                          u.username,u.display_name,u.avatar,u.bio,u.exp
                    FROM community_comments c JOIN users u ON u.id=c.user_id
                    WHERE c.post_id=? AND c.deleted_at IS NULL
                    ORDER BY c.created_at ASC LIMIT 50""",
@@ -1527,7 +1532,7 @@ def share_community_post(user_id, post_id):
 def public_community_profile(user_id, viewer_id=""):
     with connect() as db:
         row = db.execute(
-            "SELECT id AS author_id,username,display_name,avatar,bio,created_at FROM users WHERE id=?",
+            "SELECT id AS author_id,username,display_name,avatar,bio,exp,created_at FROM users WHERE id=?",
             (str(user_id),),
         ).fetchone()
         if not row:
