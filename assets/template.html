@@ -233,6 +233,11 @@
   .preset-item .pi-del{color:var(--err);}
 
   .user-area{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12.5px}
+  .header-login-btn{margin-left:auto;border:none;cursor:pointer;font-weight:700;font-size:13.5px;color:#fff;
+                    background:linear-gradient(135deg,#2f6fed,#4f46e5);padding:8px 18px;border-radius:999px;
+                    box-shadow:0 3px 10px rgba(47,111,237,.35);transition:all .18s;white-space:nowrap}
+  .header-login-btn:hover{transform:translateY(-1px);box-shadow:0 5px 15px rgba(47,111,237,.45)}
+  .header-login-btn:active{transform:translateY(0)}
   .user-chip{display:flex;align-items:center;gap:7px;background:var(--brand-soft);color:var(--brand);padding:6px 10px;border-radius:999px;font-weight:600}
   .sync-dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px rgba(22,163,74,.12)}
   .text-btn{border:0;background:none;color:var(--muted);cursor:pointer;padding:6px}
@@ -288,20 +293,23 @@
   .auth-box input{width:100%;padding:11px 14px;border:1.5px solid var(--line);border-radius:10px;
                   margin:0 0 12px;font-size:14px;transition:all .18s;background:#fafbff}
   .auth-box input:focus{border-color:var(--brand);background:#fff;box-shadow:0 0 0 3px var(--brand-soft);outline:none}
-  .auth-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:6px}
-  .auth-actions button{padding:12px;border-radius:10px;font-weight:700;cursor:pointer;font-size:14.5px;
-                       border:none;transition:all .18s}
+  .auth-actions{display:grid;grid-template-columns:1fr;gap:9px;margin-top:4px}
+  .auth-actions button{padding:13px;border-radius:11px;font-weight:700;cursor:pointer;font-size:15px;
+                       letter-spacing:4px;border:none;transition:all .18s}
   .auth-actions .btn-primary{background:linear-gradient(135deg,#2f6fed,#4f46e5);color:#fff;
                              box-shadow:0 4px 14px rgba(47,111,237,.35)}
   .auth-actions .btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(47,111,237,.45)}
   .auth-actions .btn-primary:active{transform:translateY(0)}
   .auth-state{font-size:12.5px;min-height:20px;color:var(--muted);margin-top:10px;text-align:center}
-  .auth-remember{display:flex;align-items:center;gap:7px;font-size:13px;color:#4b5163;margin:14px 0 0;cursor:pointer}
+  .auth-remember{display:flex;align-items:center;gap:7px;font-size:12.5px;color:#5b6272;margin:11px 2px 2px;cursor:pointer;user-select:none}
   .auth-remember input{width:auto;margin:0;accent-color:var(--brand)}
+  .auth-link-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px;min-height:20px;font-size:12.5px}
+  .auth-link-row a,.auth-switch a{color:var(--brand);cursor:pointer;text-decoration:none;font-weight:600}
+  .auth-link-row a:hover,.auth-switch a:hover{text-decoration:underline}
   .auth-mode-toggle{margin-top:10px;font-size:13px;min-height:18px;text-align:right}
   .auth-mode-toggle a{color:var(--brand);cursor:pointer;text-decoration:none;font-weight:600}
   .auth-mode-toggle a:hover{text-decoration:underline}
-  .auth-alt{margin-top:14px;font-size:13px;color:var(--muted);text-align:center}
+  .auth-alt{margin-top:13px;font-size:13px;color:var(--muted);text-align:center}
   .auth-alt a{color:var(--brand);cursor:pointer;text-decoration:none;font-weight:700}
   .auth-alt a:hover{text-decoration:underline}
   #auth-login-view,#auth-register-view{animation:fadeSlide .25s ease}
@@ -335,24 +343,23 @@
   .me-bio{flex:0 0 100%;width:100%;font-size:13px;line-height:1.6;background:rgba(255,255,255,.14);border-radius:10px;padding:8px 12px;margin-top:4px;display:none}
   .me-bio.show{display:block}
   /* 等级徽章与经验条 */
-  .me-level{flex:0 0 100%;display:flex;align-items:center;gap:12px;margin-top:12px;cursor:pointer;
-            background:rgba(255,255,255,.14);border-radius:12px;padding:10px 14px;transition:background .15s}
-  .me-level:hover{background:rgba(255,255,255,.22)}
-  .level-badge{flex-shrink:0;width:52px;height:52px;border-radius:14px;display:flex;flex-direction:column;
+  .me-level{display:flex;align-items:center;gap:9px;margin-top:9px;cursor:pointer;max-width:300px;width:100%;
+            background:rgba(255,255,255,.16);border-radius:11px;padding:6px 11px;transition:background .15s}
+  .me-level:hover{background:rgba(255,255,255,.24)}
+  .level-badge{flex-shrink:0;width:40px;height:40px;border-radius:11px;display:flex;flex-direction:column;
                align-items:center;justify-content:center;color:#fff;font-weight:800;line-height:1;
-               box-shadow:0 4px 12px rgba(0,0,0,.18)}
-  .level-badge small{font-size:9px;font-weight:700;opacity:.9;margin-top:2px}
-  .level-badge b{font-size:19px}
+               box-shadow:0 3px 8px rgba(0,0,0,.18)}
+  .level-badge small{font-size:8px;font-weight:700;opacity:.92;margin-top:2px}
+  .level-badge b{font-size:15px}
   .level-main{flex:1;min-width:0}
-  .level-title-row{display:flex;align-items:center;gap:8px;margin-bottom:5px}
-  .level-title{font-weight:800;font-size:15px;color:#fff}
+  .level-title-row{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .level-title{font-weight:800;font-size:13px;color:#fff}
   .level-tier{font-size:11px;font-weight:700;background:rgba(255,255,255,.22);color:#fff;
               padding:1px 8px;border-radius:20px}
-  .level-exp-text{margin-left:auto;font-size:11.5px;color:#eef3ff;font-weight:600;white-space:nowrap}
-  .exp-bar{height:8px;background:rgba(255,255,255,.25);border-radius:99px;overflow:hidden}
+  .level-exp-text{margin-left:auto;font-size:11px;color:#eef3ff;font-weight:600;white-space:nowrap}
+  .exp-bar{height:6px;background:rgba(255,255,255,.28);border-radius:99px;overflow:hidden}
   .exp-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#fde68a,#fff);
              width:0;transition:width .5s cubic-bezier(.2,.8,.3,1)}
-  .level-hint{flex:0 0 100%;font-size:11.5px;color:#eaf0ff;opacity:.9;margin-top:-4px}
   /* 每日任务弹窗 */
   .task-head-row{display:flex;align-items:center;gap:10px;margin-bottom:6px}
   .task-head-row .lv-pill{font-weight:800;color:#fff;border-radius:10px;padding:4px 12px;font-size:14px}
@@ -531,6 +538,7 @@
   <div class="hrow">
     <h1>📚 SQL 错题本</h1>
     <span class="stats" id="header-stats">登录后自动同步学习进度</span>
+    <button class="header-login-btn" id="header-login-btn">🔑 登录 / 注册</button>
     <div class="user-area" id="user-area" hidden>
       <span class="user-chip"><i class="sync-dot"></i><span class="avatar" id="top-avatar"></span><span id="user-name"></span></span>
       <button class="text-btn" id="logout-btn">退出</button>
@@ -686,23 +694,22 @@
       <h2 id="me-username"></h2>
       <p class="me-display-name" id="me-display-name"></p>
       <p class="meta" id="me-email"></p>
+      <div class="me-level" id="me-level" title="点击查看每日任务与经验规则">
+        <span class="level-badge" id="me-level-badge"><b>Lv1</b><small>初识</small></span>
+        <div class="level-main">
+          <div class="level-title-row">
+            <span class="level-title" id="me-level-title">数据萌新</span>
+            <span class="level-exp-text" id="me-exp-text">0 / 50</span>
+          </div>
+          <div class="exp-bar"><i id="me-exp-fill"></i></div>
+        </div>
+      </div>
     </div>
     <div class="me-stats">
       <div class="review-kpi"><strong id="me-total">0</strong><span>错题总数</span></div>
       <div class="review-kpi"><strong id="me-mastered">0</strong><span>已掌握</span></div>
       <div class="review-kpi"><strong id="me-due">0</strong><span>今日待复习</span></div>
     </div>
-    <div class="me-level" id="me-level" title="点击查看每日任务">
-      <span class="level-badge" id="me-level-badge"><b>Lv1</b><small>初识</small></span>
-      <div class="level-main">
-        <div class="level-title-row">
-          <span class="level-title" id="me-level-title">数据萌新</span>
-          <span class="level-exp-text" id="me-exp-text">0 / 50</span>
-        </div>
-        <div class="exp-bar"><i id="me-exp-fill"></i></div>
-      </div>
-    </div>
-    <div class="level-hint">✨ 点击经验条查看每日任务，登录 / 复习 / 新增错题 / 讨论互动都能获得经验</div>
     <div class="me-bio" id="me-bio"></div>
   </div>
   <div class="me-section">
@@ -849,10 +856,8 @@
         <div class="profile-meta">建议正方形图片，自动压缩；也可在下方选择默认头像。</div>
       </div>
     </div>
-    <div class="picker-section-title">🐾 可爱卡通头像</div>
+    <div class="picker-section-title">🐾 选择卡通头像</div>
     <div class="avatar-picker" id="pf-cartoon"></div>
-    <div class="picker-section-title">🔤 字母渐变头像（按用户名配色）</div>
-    <div class="avatar-picker" id="pf-picker"></div>
     <label style="font-size:13px;font-weight:600;color:#4b5163">昵称（选填）</label>
     <input id="pf-display-name" maxlength="40" placeholder="给自己起个昵称">
     <label style="font-size:13px;font-weight:600;color:#4b5163">个人简介（选填）</label>
@@ -932,12 +937,15 @@
           <button type="button" class="btn-plain" id="auth-login-send">发送验证码</button>
         </div>
       </div>
-      <div class="auth-mode-toggle">
-        <a href="javascript:void(0)" id="auth-toggle-code-login" hidden>📲 验证码登录</a>
-        <a href="javascript:void(0)" id="auth-toggle-pass-login" hidden>🔑 密码登录</a>
+      <div class="auth-link-row">
+        <span class="auth-switch">
+          <a href="javascript:void(0)" id="auth-toggle-code-login" hidden>📲 验证码登录</a>
+          <a href="javascript:void(0)" id="auth-toggle-pass-login" hidden>🔑 密码登录</a>
+        </span>
+        <a href="javascript:void(0)" id="auth-forgot">忘记密码？</a>
       </div>
-      <div class="auth-link-row"><span></span><a href="javascript:void(0)" id="auth-forgot">忘记密码？使用注册邮箱找回</a></div>
-      <div class="auth-actions"><button class="btn-primary" id="auth-login">登录</button></div>
+      <label class="auth-remember"><input type="checkbox" id="auth-remember" checked> 30 天内自动登录</label>
+      <div class="auth-actions"><button class="btn-primary" id="auth-login">登 录</button></div>
       <div class="auth-alt">还没有账号？<a href="javascript:void(0)" id="auth-goto-register">创建账号 →</a></div>
     </div>
     <div id="auth-register-view" hidden>
@@ -976,7 +984,6 @@
       <div class="account-list" id="auth-login-accounts"></div>
       <div class="auth-alt"><a href="javascript:void(0)" id="auth-account-back">← 重新登录</a></div>
     </div>
-    <label class="auth-remember"><input type="checkbox" id="auth-remember" checked> 30 天内自动登录</label>
     <div class="auth-state" id="auth-state"></div>
   </div>
 </div>
@@ -1134,7 +1141,7 @@ function showAuthView(mode){
   document.getElementById('auth-login-code-view').hidden=(mode!=='login-code');
   document.getElementById('auth-toggle-code-login').hidden=(mode==='login-code')||!registerCfg.email_code_login_available;
   document.getElementById('auth-toggle-pass-login').hidden=(mode!=='login-code');
-  document.getElementById('auth-remember').parentElement.hidden=(mode==='reset');
+  document.getElementById('auth-remember').parentElement.hidden=!['login-pass','login-code'].includes(mode);
 }
 function showAuth(message){
   pendingAuthFlow=null;
@@ -1187,6 +1194,7 @@ async function initAccount(){
 async function enterAccount(user, levelResult){
   currentUser=user;hideAuth();
   document.getElementById('user-area').hidden=false;
+  document.getElementById('header-login-btn').hidden=true;
   document.getElementById('user-name').textContent=user.display_name||user.username;
   paintAllAvatars(user);
   document.getElementById('ai-settings-btn').hidden=!user.is_admin;
@@ -1370,9 +1378,10 @@ document.querySelectorAll('.modal-mask').forEach(function(mask){
     if(mask.id==='auth-modal')hideAuth();
   });
 });
+document.getElementById('header-login-btn').addEventListener('click',()=>showAuth());
 document.getElementById('logout-btn').addEventListener('click',async()=>{
   await fetch('/api/auth/logout',{method:'POST'});currentUser=null;window.__QUIZ_DATA__=[];
-  document.getElementById('user-area').hidden=true;document.getElementById('tab-analytics-btn').hidden=true;
+  document.getElementById('user-area').hidden=true;document.getElementById('header-login-btn').hidden=false;document.getElementById('tab-analytics-btn').hidden=true;
   renderLibrary();switchTab('community');document.getElementById('header-stats').textContent='已安全退出 · 可继续浏览讨论室';
 });
 
@@ -1614,12 +1623,9 @@ function openProfileModal(){
   // 预览当前头像
   if(currentUser.avatar){paintPfPreview(currentUser.avatar);}
   else{paintPfPreviewInitial();}
-  const baseName=currentUser.display_name||currentUser.username;
-  const picker=document.getElementById('pf-picker');
   const cartoonBox=document.getElementById('pf-cartoon');
-  picker.innerHTML='';cartoonBox.innerHTML='';
-  const clearSel=()=>{picker.querySelectorAll('.av-opt').forEach(x=>x.classList.remove('selected'));
-                      cartoonBox.querySelectorAll('.av-opt').forEach(x=>x.classList.remove('selected'));};
+  cartoonBox.innerHTML='';
+  const clearSel=()=>{cartoonBox.querySelectorAll('.av-opt').forEach(x=>x.classList.remove('selected'));};
   // 可爱卡通头像
   const CARTOONS=['fox','cat','owl','bear','penguin','rabbit','dino','shiba'];
   CARTOONS.forEach(name=>{
@@ -1631,18 +1637,6 @@ function openProfileModal(){
       clearSel();opt.classList.add('selected');paintPfPreview(pfPendingAvatar);
     });
     cartoonBox.appendChild(opt);
-  });
-  // 字母渐变头像
-  AVATAR_THEMES.forEach((pair,i)=>{
-    const opt=document.createElement('div');opt.className='av-opt';
-    opt.style.background='linear-gradient(135deg,'+pair[0]+','+pair[1]+')';
-    opt.textContent=(baseName.trim()[0]||'?').toUpperCase();
-    opt.title='渐变头像 '+(i+1);
-    opt.addEventListener('click',()=>{
-      pfPendingAvatar=defaultAvatarDataUrl(baseName,i);
-      clearSel();opt.classList.add('selected');paintPfPreview(pfPendingAvatar);
-    });
-    picker.appendChild(opt);
   });
   document.getElementById('profile-modal').hidden=false;
 }
@@ -1664,7 +1658,7 @@ function processAvatarFile(file){
       if(dataUrl.length>300000){dataUrl=canvas.toDataURL('image/jpeg',0.7);}
       pfPendingAvatar=dataUrl;
       paintPfPreview(dataUrl);
-      ['pf-picker','pf-cartoon'].forEach(id=>document.getElementById(id).querySelectorAll('.av-opt').forEach(x=>x.classList.remove('selected')));
+      document.getElementById('pf-cartoon').querySelectorAll('.av-opt').forEach(x=>x.classList.remove('selected'));
       setPfState('✅ 已裁剪为正方形头像，保存后生效');
     };
     img.onerror=()=>setPfState('⛔ 图片读取失败，请换一张');
