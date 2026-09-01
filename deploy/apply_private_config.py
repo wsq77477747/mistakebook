@@ -53,7 +53,7 @@ EMAIL_DEFAULTS = {
     "port": 465,
     "use_ssl": True,
     "use_starttls": False,
-    "sender_name": "SQL 错题本",
+    "sender_name": "错题本",
 }
 SECRET_FIELDS = {"api_key", "password"}
 

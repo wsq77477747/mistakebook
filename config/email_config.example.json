@@ -7,5 +7,5 @@
   "username": "you@qq.com",
   "password": "在邮箱设置里生成的 SMTP 授权码，不是邮箱登录密码",
   "sender": "you@qq.com",
-  "sender_name": "SQL 错题本"
+  "sender_name": "错题本"
 }

@@ -106,10 +106,10 @@ class ApplyPrivateConfigTests(unittest.TestCase):
         self.script.merge_into(target, {"host": "smtp.example.com", "port": 587})
         merged = self.script.merge_into(
             target, {"enabled": True},
-            defaults={"enabled": True, "port": 465, "use_ssl": True, "sender_name": "SQL 错题本"})
+            defaults={"enabled": True, "port": 465, "use_ssl": True, "sender_name": "错题本"})
         self.assertEqual(merged["port"], 587)  # 已有端口不被默认值覆盖
         self.assertEqual(merged["use_ssl"], True)  # 缺失字段由默认值补齐
-        self.assertEqual(merged["sender_name"], "SQL 错题本")
+        self.assertEqual(merged["sender_name"], "错题本")
 
     def test_email_updates_require_enabled_flag(self):
         ai, email = self.script.collect_updates({"EMAIL_HOST": "smtp.qq.com"})  # 未开 EMAIL_ENABLED

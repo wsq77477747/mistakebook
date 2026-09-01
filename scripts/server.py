@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-server.py —— SQL 错题本本地 AI 代理服务（Python 标准库，零依赖）
+server.py —— 错题本本地 AI 代理服务（Python 标准库，零依赖）
 =================================================================
 职责：
   1. 静态托管本目录（打开 http://127.0.0.1:8765/ 即错题本页面）
@@ -1174,7 +1174,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         # 注入简洁系统提示（如果用户没传 system）
         has_system = any(m.get("role") == "system" for m in messages if isinstance(m, dict))
         if not has_system:
-            messages.insert(0, {"role": "system", "content": "你是SQL错题本AI助手。回答务必简洁直接、要点式，不超过3句话，不要寒暄、不要重复用户问题、不要多余解释。能用一句话说清就不用两句。"})
+            messages.insert(0, {"role": "system", "content": "你是错题本AI助手。回答务必简洁直接、要点式，不超过3句话，不要寒暄、不要重复用户问题、不要多余解释。能用一句话说清就不用两句。"})
         try:
             reply = _call_llm(cfg, messages)
             self._track_event("ai_chat", metadata={"msg_count": len(messages), "own_config": own})
@@ -1510,7 +1510,7 @@ def main():
         sys.exit(1)
 
     print("=" * 46)
-    print("  SQL 错题本本地服务已启动")
+    print("  错题本本地服务已启动")
     print(f"  页面地址：http://{HOST}:{PORT}/")
     print(f"  AI 配置：{CONFIG_FILE}")
     print("  关闭本窗口或双击「停止服务.bat」即可停止")

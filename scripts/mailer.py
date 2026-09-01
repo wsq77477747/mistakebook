@@ -15,7 +15,7 @@ mailer.py —— 注册邮箱验证码发信（Python 标准库，零依赖）
   "username": "you@qq.com",
   "password": "SMTP 授权码（不是邮箱登录密码）",
   "sender": "you@qq.com",
-  "sender_name": "SQL 错题本"
+  "sender_name": "错题本"
 }
 """
 import json
@@ -29,7 +29,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(SCRIPT_DIR)
 CONFIG_FILE = os.path.join(ROOT, "config", "email_config.json")
 
-SENDER_NAME_FALLBACK = "SQL 错题本"
+SENDER_NAME_FALLBACK = "错题本"
 
 
 def load_email_config():
@@ -102,8 +102,8 @@ def _send_mail(cfg, to, subject, html):
 
 _CODE_MAIL_TMPL = """<div style="max-width:480px;margin:0 auto;font-family:'Microsoft YaHei',Arial,sans-serif;
 color:#222;border:1px solid #eee;border-radius:12px;padding:28px 32px;">
-  <h2 style="margin:0 0 4px;font-size:20px;">📚 SQL 错题本</h2>
-  <p style="margin:0 0 18px;color:#888;font-size:13px;">你正在注册 SQL 错题本账号，验证码如下：</p>
+  <h2 style="margin:0 0 4px;font-size:20px;">📚 错题本</h2>
+  <p style="margin:0 0 18px;color:#888;font-size:13px;">你正在注册错题本账号，验证码如下：</p>
   <div style="font-size:32px;font-weight:700;letter-spacing:8px;background:#f5f6fa;
 border-radius:10px;padding:16px 0;text-align:center;color:#1d4ed8;">{code}</div>
   <p style="margin:18px 0 4px;font-size:13px;color:#666;">
@@ -113,7 +113,7 @@ border-radius:10px;padding:16px 0;text-align:center;color:#1d4ed8;">{code}</div>
 
 _PURPOSE_CODE_MAIL_TMPL = """<div style="max-width:480px;margin:0 auto;font-family:'Microsoft YaHei',Arial,sans-serif;
 color:#222;border:1px solid #eee;border-radius:12px;padding:28px 32px;">
-  <h2 style="margin:0 0 4px;font-size:20px;">SQL 错题本 · {purpose_label}</h2>
+  <h2 style="margin:0 0 4px;font-size:20px;">错题本 · {purpose_label}</h2>
   <p style="margin:0 0 18px;color:#888;font-size:13px;">你正在进行“{purpose_label}”操作，验证码如下：</p>
   <div style="font-size:32px;font-weight:700;letter-spacing:8px;background:#f5f6fa;
 border-radius:10px;padding:16px 0;text-align:center;color:#1d4ed8;">{code}</div>
@@ -132,7 +132,7 @@ def send_verification_code(to, code, ttl_minutes=10, purpose="register"):
     html = _PURPOSE_CODE_MAIL_TMPL.format(
         code=str(code), ttl=ttl_minutes, purpose_label=purpose_label
     )
-    _send_mail(cfg, to, "SQL 错题本%s验证码：%s" % (purpose_label, code), html)
+    _send_mail(cfg, to, "错题本%s验证码：%s" % (purpose_label, code), html)
 
 
 def send_test_email(to, cfg=None):
@@ -141,5 +141,5 @@ def send_test_email(to, cfg=None):
     if not cfg:
         raise RuntimeError("邮件服务未配置")
     html = ('<div style="font-family:Arial,sans-serif;color:#222;"><h2>📧 邮件服务配置成功</h2>'
-            '<p>这是一封来自 SQL 错题本的测试邮件，收到即说明 SMTP 配置可用。</p></div>')
-    _send_mail(cfg, to, "SQL 错题本邮件服务测试", html)
+            '<p>这是一封来自错题本的测试邮件，收到即说明 SMTP 配置可用。</p></div>')
+    _send_mail(cfg, to, "错题本邮件服务测试", html)

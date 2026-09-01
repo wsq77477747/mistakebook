@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title SQL 错题本
+title 错题本
 cd /d "%~dp0"
 
 rem ============ 自动探测 Python（防止命中 Windows 商店占位符，导致服务起不来） ============
@@ -47,7 +47,7 @@ if "%PSTAT%"=="up" (
   echo [..] 服务已在运行，跳过启动。
 ) else (
   echo [..] 正在启动本地服务，请稍候...
-  start "SQL错题本-AI服务" /min "%PYCMD%" scripts\server.py
+  start "错题本-AI服务" /min "%PYCMD%" scripts\server.py
   timeout /t 2 >nul
 )
 
