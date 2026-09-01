@@ -22,7 +22,7 @@ QUIZ_DIR = os.path.join(ROOT, "错题库")
 SESSION_DAYS = 30
 SESSION_RENEW_THRESHOLD_DAYS = SESSION_DAYS // 2  # 剩余不足一半时滑动续期
 FREE_AI_CALLS_PER_DAY = 3      # 使用站点默认模型时，每用户每日免费次数
-INVITE_BONUS_CALLS = 10        # 每邀请 1 位新用户，邀请人每日免费额度永久 +10
+INVITE_BONUS_CALLS = 10        # 有效邀请码注册成功后，邀请人与被邀请人每日额度各 +10
 MAX_ACCOUNTS_PER_EMAIL = 3
 AUTH_TICKET_TTL_MINUTES = 10
 PBKDF2_ITERATIONS = 240_000
@@ -94,6 +94,23 @@ ACTION_DAILY_CAP = {"review": 100, "add": 80, "interact": 30}
 
 def _now():
     return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def validate_password(password, label="密码"):
+    """密码至少 6 位，且字母、数字、符号三类中至少包含两类。"""
+    value = str(password or "")
+    if not value:
+        raise ValueError("请填写%s。" % label)
+    if len(value) < 6:
+        raise ValueError("%s至少需要 6 个字符。" % label)
+    categories = sum((
+        any(ch.isalpha() for ch in value),
+        any(ch.isdigit() for ch in value),
+        any(not ch.isalnum() and not ch.isspace() for ch in value),
+    ))
+    if categories < 2:
+        raise ValueError("%s必须包含字母、数字或符号中的至少两种。" % label)
+    return True
 
 
 def _today():
@@ -371,8 +388,7 @@ def register_user(username, password, email, invite_code=None):
     email_norm = email.casefold()
     if len(username) < 3 or len(username) > 80:
         raise ValueError("账号长度需为 3–80 个字符。")
-    if len(str(password or "")) < 8:
-        raise ValueError("密码至少需要 8 个字符。")
+    validate_password(password)
     if not email:
         raise ValueError("请填写邮箱。")
     if len(email) > 254 or not EMAIL_RE.match(email):
@@ -411,7 +427,7 @@ def register_user(username, password, email, invite_code=None):
             )
         except sqlite3.IntegrityError as exc:
             raise ValueError("该账号已存在。") from exc
-        if inviter_id:  # 邀请成功：邀请人每日免费额度永久 +10
+        if inviter_id:  # 邀请成功：邀请人 +1 奖励单位；被邀请人由 invited_by 自动获得 1 单位
             db.execute("UPDATE users SET invite_bonus=invite_bonus+1 WHERE id=?", (inviter_id,))
     imported = import_legacy_questions(user_id) if first_user else 0
     return {"id": user_id, "username": username, "email": email,
@@ -672,11 +688,13 @@ def save_user_ai_config(user_id, cfg):
 
 
 def daily_ai_quota(user_id):
-    """每日免费次数 = 3 + 10 × 已邀请人数。"""
+    """邀请人每成功邀请 1 人 +10；被邀请人首次使用有效邀请码也 +10。"""
     with connect() as db:
-        row = db.execute("SELECT invite_bonus FROM users WHERE id=?", (user_id,)).fetchone()
-    bonus = int(row["invite_bonus"] or 0) if row else 0
-    return FREE_AI_CALLS_PER_DAY + INVITE_BONUS_CALLS * bonus
+        row = db.execute(
+            "SELECT invite_bonus, invited_by FROM users WHERE id=?", (user_id,)
+        ).fetchone()
+    reward_units = (int(row["invite_bonus"] or 0) + (1 if row["invited_by"] else 0)) if row else 0
+    return FREE_AI_CALLS_PER_DAY + INVITE_BONUS_CALLS * reward_units
 
 
 def count_ai_calls_today(user_id):
@@ -704,9 +722,13 @@ def invite_summary(user_id):
             "SELECT invite_code, invite_bonus, invited_by FROM users WHERE id=?", (user_id,)
         ).fetchone()
     if not row:
-        return {"invite_code": "", "invite_bonus": 0}
-    return {"invite_code": row["invite_code"], "invite_bonus": int(row["invite_bonus"] or 0),
-            "invited_by": row["invited_by"]}
+        return {"invite_code": "", "invite_bonus": 0, "reward_units": 0,
+                "received_invite_reward": False}
+    invited_count = int(row["invite_bonus"] or 0)
+    received = bool(row["invited_by"])
+    return {"invite_code": row["invite_code"], "invite_bonus": invited_count,
+            "reward_units": invited_count + (1 if received else 0),
+            "received_invite_reward": received, "invited_by": row["invited_by"]}
 
 
 def authenticate(username, password):
@@ -837,8 +859,7 @@ def consume_auth_ticket(token, purpose, user_id):
 
 def update_password(user_id, new_password):
     password = str(new_password or "")
-    if len(password) < 8:
-        raise ValueError("新密码至少需要 8 个字符。")
+    validate_password(password, "新密码")
     salt = secrets.token_hex(16)
     with connect() as db:
         db.execute("BEGIN IMMEDIATE")

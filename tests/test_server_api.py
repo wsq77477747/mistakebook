@@ -113,6 +113,24 @@ class ServerApiTests(unittest.TestCase):
         return target
 
     def test_auth_questions_review_and_sync(self):
+        status, err = self.request(
+            "/api/auth/register",
+            {"username": "", "password": "abc123", "email": "missing-name@example.com"},
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("用户名", err["message"])
+        status, err = self.request(
+            "/api/auth/register",
+            {"username": "bad-password", "password": "abcdef", "email": "bad-password@example.com"},
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("至少两种", err["message"])
+        status, err = self.request(
+            "/api/auth/register",
+            {"username": "bad-email", "password": "abc123", "email": "not-an-email"},
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("邮箱格式", err["message"])
         status, registered = self.request(
             "/api/auth/register",
             {"username": "api-user", "password": "password123", "email": "api-user@example.com"},
@@ -216,6 +234,10 @@ class ServerApiTests(unittest.TestCase):
             status, err = self.request(
                 "/api/auth/send_code", {"email": "ghost@example.com", "purpose": "login"})
             self.assertEqual(status, 404)
+            status, err = self.request(
+                "/api/auth/login", {"email": "codelogin@example.com"})
+            self.assertEqual(status, 400)
+            self.assertIn("登录验证码", err["message"])
             # 同一邮箱未满 3 个账号时，仍允许发送注册用途验证码
             status, err = self.request(
                 "/api/auth/send_code", {"email": "codelogin@example.com", "purpose": "register"})
@@ -312,9 +334,16 @@ class ServerApiTests(unittest.TestCase):
             status, _ = self.request("/api/auth/send_code", {
                 "email": "shared-api@example.com", "purpose": "reset"})
             self.assertEqual(status, 200)
+            reset_code = sent[("shared-api@example.com", "reset")]
+            wrong_reset_code = "000000" if reset_code != "000000" else "111111"
+            status, reset_error = self.request("/api/auth/reset_password", {
+                "email": "shared-api@example.com", "email_code": wrong_reset_code,
+            })
+            self.assertEqual(status, 400)
+            self.assertIn("验证码", reset_error["message"])
             status, reset = self.request("/api/auth/reset_password", {
                 "email": "shared-api@example.com",
-                "email_code": sent[("shared-api@example.com", "reset")],
+                "email_code": reset_code,
             })
             self.assertTrue(reset["account_selection_required"])
             status, invalid = self.request("/api/auth/reset_password", {

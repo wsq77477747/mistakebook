@@ -416,7 +416,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._send_json(429, {
                 "error": "AI_QUOTA_EXCEEDED",
                 "message": "今日免费次数已用完（%d/%d 次）。可在「我的」页配置自己的 AI Key 解除限制，"
-                           "或邀请新用户注册（每位 +10 次/日）。" % (used, total),
+                           "或通过邀请码邀请新用户注册（双方各 +10 次/日）。" % (used, total),
             })
             return True
         return False
@@ -428,7 +428,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         used = storage.count_ai_calls_today(uid)
         return self._send_json(200, {
             "base_free": storage.FREE_AI_CALLS_PER_DAY,
-            "invite_bonus": summary["invite_bonus"],
+            "invite_bonus": summary["reward_units"],
+            "invited_count": summary["invite_bonus"],
+            "received_invite_reward": summary["received_invite_reward"],
             "daily_total": total,
             "used_today": used,
             "remaining": max(0, total - used),
@@ -622,8 +624,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def _register(self):
         body = self._read_body()
+        username = str(body.get("username") or "").strip()
+        password = str(body.get("password") or "")
         email = str(body.get("email") or "").strip()
         try:
+            if not username:
+                return self._send_json(400, {"error": "USERNAME_REQUIRED", "message": "请填写用户名。"})
+            if len(username) < 3 or len(username) > 80:
+                return self._send_json(400, {"error": "INVALID_USERNAME", "message": "用户名长度需为 3–80 个字符。"})
+            storage.validate_password(password)
+            if not email:
+                return self._send_json(400, {"error": "EMAIL_REQUIRED", "message": "请填写邮箱地址。"})
+            if len(email) > 254 or not storage.EMAIL_RE.match(email):
+                return self._send_json(400, {"error": "INVALID_EMAIL",
+                                             "message": "邮箱格式不合法，请填写类似 name@example.com 的完整地址。"})
             if storage.email_account_count(email) >= storage.MAX_ACCOUNTS_PER_EMAIL:
                 return self._send_json(409, {
                     "error": "EMAIL_ACCOUNT_LIMIT",
@@ -635,7 +649,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     return self._send_json(400, {"error": "EMAIL_CODE_REQUIRED",
                                                  "message": "请先获取邮箱验证码并填写后再注册。"})
                 storage.verify_email_code(email, code, purpose="register")
-            user = storage.register_user(body.get("username"), body.get("password"), email,
+            user = storage.register_user(username, password, email,
                                          invite_code=body.get("invite_code"))
             remember = bool(body.get("remember_me", True))
             token = storage.create_session(user["id"], persistent=remember)
@@ -716,7 +730,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             except ValueError as exc:
                 return self._send_json(401, {"error": "LOGIN_FAILED", "message": str(exc)})
             method = "email_account_selection"
-        elif code:
+        elif email or code:
+            if not email:
+                return self._send_json(400, {"error": "EMAIL_REQUIRED", "message": "请填写登录邮箱。"})
+            if len(email) > 254 or not storage.EMAIL_RE.match(email):
+                return self._send_json(400, {"error": "INVALID_EMAIL", "message": "邮箱格式不合法。"})
+            if not code:
+                return self._send_json(400, {"error": "EMAIL_CODE_REQUIRED",
+                                             "message": "请填写邮箱收到的 6 位登录验证码。"})
             try:
                 storage.verify_email_code(email, code, purpose="login")
             except ValueError as exc:
@@ -735,6 +756,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             user = users[0]
             method = "email_code"
         else:
+            if not str(body.get("username") or "").strip():
+                return self._send_json(400, {"error": "USERNAME_REQUIRED", "message": "请填写账号或邮箱。"})
+            if not str(body.get("password") or ""):
+                return self._send_json(400, {"error": "PASSWORD_REQUIRED", "message": "请填写密码。"})
             user = storage.authenticate(body.get("username"), body.get("password"))
             if not user:
                 return self._send_json(401, {"error": "LOGIN_FAILED", "message": "账号或密码不正确。"})
@@ -754,11 +779,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         body = self._read_body()
         selection_token = str(body.get("selection_token") or "").strip()
         if selection_token:
-            if len(str(body.get("new_password") or "")) < 8:
-                return self._send_json(400, {
-                    "error": "RESET_FAILED", "message": "新密码至少需要 8 个字符。"
-                })
             try:
+                storage.validate_password(body.get("new_password"), "新密码")
                 user = storage.consume_auth_ticket(
                     selection_token, "reset", str(body.get("account_id") or "")
                 )
@@ -771,10 +793,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             })
         email = str(body.get("email") or "").strip()
         code = str(body.get("email_code") or "").strip()
-        if not email or not code:
-            return self._send_json(400, {
-                "error": "RESET_CODE_REQUIRED", "message": "请填写注册邮箱和找回密码验证码。"
-            })
+        if not email:
+            return self._send_json(400, {"error": "EMAIL_REQUIRED", "message": "请填写注册邮箱。"})
+        if len(email) > 254 or not storage.EMAIL_RE.match(email):
+            return self._send_json(400, {"error": "INVALID_EMAIL", "message": "邮箱格式不合法。"})
+        if not code:
+            return self._send_json(400, {"error": "RESET_CODE_REQUIRED",
+                                         "message": "请填写邮箱收到的 6 位找回密码验证码。"})
         try:
             storage.verify_email_code(email, code, purpose="reset")
             users = storage.users_by_email(email)

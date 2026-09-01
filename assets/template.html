@@ -734,7 +734,7 @@
   </div>
   <div class="me-section">
     <h3>🎁 邀请好友</h3>
-    <p class="meta">好友注册时填写你的邀请码，你的每日免费 AI 次数永久 +10。</p>
+    <p class="meta">好友注册时填写你的邀请码，双方的每日免费 AI 次数都会永久 +10。</p>
     <div class="import-actions">
       <span class="invite-code" id="my-invite-code">--------</span>
       <button class="btn-plain" id="my-invite-copy">📋 复制邀请码</button>
@@ -927,7 +927,7 @@
     <div id="auth-login-view">
       <div id="auth-login-pass">
         <label>账号或邮箱</label><input id="auth-username" autocomplete="username" placeholder="至少 3 个字符">
-        <label>密码</label><input id="auth-password" type="password" autocomplete="current-password" placeholder="至少 8 个字符">
+        <label>密码</label><input id="auth-password" type="password" autocomplete="current-password" placeholder="至少 6 位">
       </div>
       <div id="auth-login-code-view" hidden>
         <label>邮箱</label><input id="auth-login-email" type="email" autocomplete="email" placeholder="name@example.com">
@@ -950,7 +950,7 @@
     </div>
     <div id="auth-register-view" hidden>
       <label>用户名</label><input id="auth-reg-username" autocomplete="username" placeholder="至少 3 个字符">
-      <label>密码</label><input id="auth-reg-password" type="password" autocomplete="new-password" placeholder="至少 8 个字符">
+      <label>密码</label><input id="auth-reg-password" type="password" autocomplete="new-password" placeholder="至少 6 位，字母/数字/符号至少两种">
       <label>邮箱</label><input id="auth-reg-email" type="email" autocomplete="email" placeholder="name@example.com">
       <div id="auth-reg-code-row" hidden>
         <label>注册验证码</label>
@@ -959,7 +959,7 @@
           <button type="button" class="btn-plain" id="auth-send-code">发送验证码</button>
         </div>
       </div>
-      <label>邀请码（选填）</label><input id="auth-reg-invite" placeholder="好友的邀请码，TA 的每日免费次数 +10">
+      <label>邀请码（选填）</label><input id="auth-reg-invite" placeholder="填写好友邀请码，双方每日免费次数各 +10">
       <div class="auth-actions"><button class="btn-primary" id="auth-register">创建账号</button></div>
       <div class="auth-alt">已有账号？<a href="javascript:void(0)" id="auth-goto-login">← 返回登录</a></div>
     </div>
@@ -972,7 +972,7 @@
       </div>
       <div id="auth-reset-account-wrap" hidden><label>选择要重置的账号</label><div class="account-list" id="auth-reset-accounts"></div></div>
       <div id="auth-reset-password-wrap" hidden>
-        <label>新密码</label><input id="auth-reset-password" type="password" autocomplete="new-password" placeholder="至少 8 个字符">
+        <label>新密码</label><input id="auth-reset-password" type="password" autocomplete="new-password" placeholder="至少 6 位，字母/数字/符号至少两种">
         <label>确认新密码</label><input id="auth-reset-confirm" type="password" autocomplete="new-password" placeholder="再次输入新密码">
       </div>
       <div class="auth-actions"><button class="btn-primary" id="auth-reset-next">验证邮箱</button></div>
@@ -1203,6 +1203,13 @@ async function enterAccount(user, levelResult){
   loadLevel().then(()=>{ if(levelResult)handleLevelResult(levelResult); });
 }
 const EMAIL_RE=/^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
+function passwordError(password,label){
+  label=label||'密码';
+  if(!password)return '请填写'+label+'。';
+  if(password.length<6)return label+'至少需要 6 位。';
+  const kinds=[/[A-Za-z]/.test(password),/\d/.test(password),/[^A-Za-z0-9\s]/.test(password)].filter(Boolean).length;
+  return kinds<2?label+'必须包含字母、数字或符号中的至少两种。':'';
+}
 function setAuthState(msg){document.getElementById('auth-state').textContent=msg;}
 async function postAuth(path,payload){
   const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
@@ -1226,14 +1233,17 @@ async function submitLogin(){
   if(authMode==='login-code'){
     const email=document.getElementById('auth-login-email').value.trim();
     const code=document.getElementById('auth-login-code').value.trim();
-    if(!EMAIL_RE.test(email)||email.length>254){setAuthState('请填写正确的邮箱地址。');return;}
-    if(!/^\d{6}$/.test(code)){setAuthState('请先点击「发送验证码」，再填写邮箱收到的 6 位验证码。');return;}
+    if(!email){setAuthState('请填写登录邮箱。');return;}
+    if(!EMAIL_RE.test(email)||email.length>254){setAuthState('邮箱格式不合法，请填写类似 name@example.com 的完整地址。');return;}
+    if(!code){setAuthState('请填写邮箱收到的登录验证码。');return;}
+    if(!/^\d{6}$/.test(code)){setAuthState('登录验证码应为 6 位数字，请检查后重新输入。');return;}
     payload.email=email;payload.email_code=code;
     okMsg='正在通过验证码登录…';
   }else{
     const username=document.getElementById('auth-username').value.trim();
     const password=document.getElementById('auth-password').value;
-    if(username.length<3||password.length<8){setAuthState('账号至少 3 个字符，密码至少 8 个字符。');return;}
+    if(!username){setAuthState('请填写账号或邮箱。');return;}
+    if(!password){setAuthState('请填写密码。');return;}
     payload.username=username;payload.password=password;
   }
   setAuthState(okMsg);
@@ -1255,14 +1265,18 @@ async function submitRegister(){
   const username=document.getElementById('auth-reg-username').value.trim();
   const password=document.getElementById('auth-reg-password').value;
   const email=document.getElementById('auth-reg-email').value.trim();
-  if(username.length<3||password.length<8){setAuthState('账号至少 3 个字符，密码至少 8 个字符。');return;}
-  if(!EMAIL_RE.test(email)||email.length>254){setAuthState('邮箱格式不正确，请填写形如 name@example.com 的地址。');return;}
+  if(!username){setAuthState('请填写用户名。');return;}
+  if(username.length<3){setAuthState('用户名至少需要 3 个字符。');return;}
+  const pwdError=passwordError(password,'密码');if(pwdError){setAuthState(pwdError);return;}
+  if(!email){setAuthState('请填写邮箱地址。');return;}
+  if(!EMAIL_RE.test(email)||email.length>254){setAuthState('邮箱格式不合法，请填写类似 name@example.com 的完整地址。');return;}
   const payload={username,password,email,remember_me:document.getElementById('auth-remember').checked};
   const invite=document.getElementById('auth-reg-invite').value.trim();
   if(invite)payload.invite_code=invite;
   if(registerCfg.email_code_required){
     const code=document.getElementById('auth-reg-code').value.trim();
-    if(!/^\d{6}$/.test(code)){setAuthState('请先点击「发送验证码」验证邮箱，再填写收到的 6 位验证码。');return;}
+    if(!code){setAuthState('请先发送并填写注册验证码。');return;}
+    if(!/^\d{6}$/.test(code)){setAuthState('注册验证码应为 6 位数字，请检查后重新输入。');return;}
     payload.email_code=code;
   }
   setAuthState('正在创建账号…');
@@ -1300,7 +1314,8 @@ async function submitReset(){
   if(pendingAuthFlow&&pendingAuthFlow.purpose==='reset'&&pendingAuthFlow.accountId){
     const password=document.getElementById('auth-reset-password').value;
     const confirm=document.getElementById('auth-reset-confirm').value;
-    if(password.length<8){setAuthState('新密码至少需要 8 个字符。');return;}
+    const pwdError=passwordError(password,'新密码');if(pwdError){setAuthState(pwdError);return;}
+    if(!confirm){setAuthState('请再次输入新密码。');return;}
     if(password!==confirm){setAuthState('两次输入的新密码不一致。');return;}
     btn.disabled=true;setAuthState('正在重置密码…');
     try{
@@ -1312,8 +1327,10 @@ async function submitReset(){
   }
   const email=document.getElementById('auth-reset-email').value.trim();
   const code=document.getElementById('auth-reset-code').value.trim();
-  if(!EMAIL_RE.test(email)||email.length>254){setAuthState('请填写正确的注册邮箱。');return;}
-  if(!/^\d{6}$/.test(code)){setAuthState('请填写邮箱收到的 6 位找回密码验证码。');return;}
+  if(!email){setAuthState('请填写注册邮箱。');return;}
+  if(!EMAIL_RE.test(email)||email.length>254){setAuthState('邮箱格式不合法，请填写类似 name@example.com 的完整地址。');return;}
+  if(!code){setAuthState('请填写邮箱收到的找回密码验证码。');return;}
+  if(!/^\d{6}$/.test(code)){setAuthState('找回密码验证码应为 6 位数字，请检查后重新输入。');return;}
   btn.disabled=true;setAuthState('正在验证邮箱…');
   try{
     const j=await postAuth('/api/auth/reset_password',{email:email,email_code:code});
@@ -1544,11 +1561,12 @@ function renderMe(){
 function refreshAiQuota(){
   fetch('/api/ai_quota').then(r=>r.json()).then(q=>{
     document.getElementById('my-invite-code').textContent=q.invite_code||'--------';
-    document.getElementById('my-invite-info').textContent='已邀请 '+q.invite_bonus+' 人 · 每日免费额度 '+q.base_free+' + '+q.invite_bonus*10+' = '+q.daily_total+' 次（今日已用 '+q.used_today+' 次）';
+    const rewardNote=q.received_invite_reward?'，其中 1 份来自填写好友邀请码':'';
+    document.getElementById('my-invite-info').textContent='已邀请 '+(q.invited_count||0)+' 人 · 双方奖励共 '+q.invite_bonus+' 份'+rewardNote+' · 每日免费额度 '+q.base_free+' + '+q.invite_bonus*10+' = '+q.daily_total+' 次（今日已用 '+q.used_today+' 次）';
     const st=document.getElementById('me-ai-status');
     if(q.using_own_config)st.textContent='✅ 正在使用你自己的 AI 配置，调用不限次数。';
     else if(q.is_admin)st.textContent='👑 管理员：使用站点默认模型 '+(q.site_model||'')+'，不限次数。';
-    else st.textContent='📦 当前使用站点默认模型 '+(q.site_model||'')+'，今日免费额度剩余 '+q.remaining+'/'+q.daily_total+' 次。超出后可在下方配置自己的 Key，或邀请好友（每位 +10 次/日）。';
+    else st.textContent='📦 当前使用站点默认模型 '+(q.site_model||'')+'，今日免费额度剩余 '+q.remaining+'/'+q.daily_total+' 次。超出后可在下方配置自己的 Key，或通过邀请码邀请好友（双方各 +10 次/日）。';
   }).catch(()=>{});
   fetch('/api/my_ai_config').then(r=>r.json()).then(c=>{
     document.getElementById('my-ai-base').value=c.base_url||'';
@@ -2166,7 +2184,7 @@ async function classify(){
     const j=await r.json().catch(()=>({}));
     if(!r.ok){
       if(j.error==='NOT_CONFIGURED')addState('⚠️ 尚未配置 API Key，点右上角 ⚙️ 配置后即可使用。','err');
-      else if(j.error==='AI_QUOTA_EXCEEDED'){addState('⛔ 今日免费次数已用完，已跳转「我的」页——可配置自己的 Key 解除限制，或邀请好友 +10 次/人。','err');switchTab('me');}
+      else if(j.error==='AI_QUOTA_EXCEEDED'){addState('⛔ 今日免费次数已用完，已跳转「我的」页——可配置自己的 Key 解除限制，或通过邀请码邀请好友，双方各 +10 次/日。','err');switchTab('me');}
       else addState('整理失败：'+(j.message||j.error||r.status),'err');
       return;
     }

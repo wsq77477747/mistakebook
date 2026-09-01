@@ -42,6 +42,14 @@ class StorageTests(unittest.TestCase):
 
     def test_register_requires_valid_email_and_limits_three_accounts(self):
         storage.register_user("owner", "password123", "owner@example.com")
+        with self.assertRaisesRegex(ValueError, "至少需要 6"):
+            storage.register_user("short-password", "a1!", "short-password@example.com")
+        with self.assertRaisesRegex(ValueError, "至少两种"):
+            storage.register_user("letters-only", "abcdef", "letters-only@example.com")
+        with self.assertRaisesRegex(ValueError, "至少两种"):
+            storage.register_user("digits-only", "123456", "digits-only@example.com")
+        six_chars = storage.register_user("six-valid", "abc123", "six-valid@example.com")
+        self.assertIsNotNone(storage.authenticate(six_chars["username"], "abc123"))
         with self.assertRaises(ValueError):
             storage.register_user("no-email", "password123", "")
         with self.assertRaises(ValueError):
@@ -182,7 +190,7 @@ class StorageTests(unittest.TestCase):
         # 无效邀请码被忽略，不影响注册
         guest = storage.register_user("guest", "password123", "guest@example.com", invite_code="BADCODE1")
         self.assertFalse(guest["invite_applied"])
-        # 有效邀请码：邀请人额度 +10
+        # 有效邀请码：邀请人与被邀请人双方额度都 +10
         friend = storage.register_user("friend", "password123", "friend@example.com",
                                        invite_code=inviter["invite_code"])
         self.assertTrue(friend["invite_applied"])
@@ -190,7 +198,11 @@ class StorageTests(unittest.TestCase):
         self.assertEqual(summary["invite_bonus"], 1)
         self.assertEqual(storage.daily_ai_quota(inviter["id"]),
                          storage.FREE_AI_CALLS_PER_DAY + storage.INVITE_BONUS_CALLS)
-        self.assertEqual(storage.daily_ai_quota(friend["id"]), storage.FREE_AI_CALLS_PER_DAY)
+        self.assertEqual(storage.daily_ai_quota(friend["id"]),
+                         storage.FREE_AI_CALLS_PER_DAY + storage.INVITE_BONUS_CALLS)
+        friend_summary = storage.invite_summary(friend["id"])
+        self.assertTrue(friend_summary["received_invite_reward"])
+        self.assertEqual(friend_summary["reward_units"], 1)
 
     def test_user_ai_config_and_call_counting(self):
         user = storage.register_user("owncfg", "password123", "owncfg@example.com")
