@@ -343,6 +343,19 @@ def init_db():
               claimed TEXT NOT NULL DEFAULT '[]',
               PRIMARY KEY(user_id, date)
             );
+
+            CREATE TABLE IF NOT EXISTS friendships (
+              id TEXT PRIMARY KEY,
+              requester_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              addressee_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              status TEXT NOT NULL DEFAULT 'pending',
+              pair_key TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_friend_pair ON friendships(pair_key);
+            CREATE INDEX IF NOT EXISTS idx_friend_addressee ON friendships(addressee_id,status);
+            CREATE INDEX IF NOT EXISTS idx_friend_requester ON friendships(requester_id,status);
             """
         )
         user_columns = {row[1] for row in db.execute("PRAGMA table_info(users)")}
@@ -1744,12 +1757,238 @@ def public_community_profile(user_id, viewer_id=""):
             "SELECT COUNT(*) FROM community_likes l JOIN community_posts p ON p.id=l.post_id "
             "WHERE p.user_id=? AND p.deleted_at IS NULL", (str(user_id),)
         ).fetchone()[0]
+    relation = friendship_status(viewer_id, user_id) if viewer_id else "none"
     return {
         "user": _community_user(row), "joined_at": row["created_at"],
+        "relation": relation,
         "post_count": int(post_count), "comment_count": int(comment_count),
         "received_likes": int(received_likes),
         "posts": list_community_posts(viewer_id, limit=10, author_id=user_id),
     }
+
+
+# ---- 好友系统 ----
+
+def _friend_pair_key(a, b):
+    a, b = str(a), str(b)
+    return "|".join(sorted((a, b)))
+
+
+def _friend_card_from_user(row, me_id, relation="none"):
+    """users 行 -> 好友/用户卡片（带等级头衔与我对其关系）。"""
+    if row is None:
+        return None
+    keys = row.keys()
+    exp = int(row["exp"]) if "exp" in keys and row["exp"] is not None else 0
+    lv = level_from_exp(exp)
+    return {
+        "id": row["id"],
+        "username": row["username"],
+        "display_name": row["display_name"] if "display_name" in keys else "",
+        "avatar": row["avatar"] if "avatar" in keys else "",
+        "bio": row["bio"] if "bio" in keys else "",
+        "invite_code": row["invite_code"] if "invite_code" in keys else "",
+        "level": lv["level"], "title": lv["title"], "tier": lv["tier"],
+        "color1": lv["color1"], "color2": lv["color2"],
+        "is_self": row["id"] == str(me_id),
+        "relation": relation,
+    }
+
+
+def _friend_card_join(row, me_id, relation, request_id=None):
+    """从 friendships JOIN users 的显式别名行构造好友卡片（避免 f.* / u.* 的 id 列冲突）。"""
+    exp = int(row["exp"] or 0)
+    lv = level_from_exp(exp)
+    rid = request_id if request_id is not None else (
+        row["request_id"] if "request_id" in row.keys() else None)
+    return {
+        "id": row["user_id"], "username": row["username"],
+        "display_name": row["display_name"] or "", "avatar": row["avatar"] or "",
+        "bio": row["bio"] or "", "invite_code": row["invite_code"] or "",
+        "level": lv["level"], "title": lv["title"], "tier": lv["tier"],
+        "color1": lv["color1"], "color2": lv["color2"],
+        "is_self": row["user_id"] == str(me_id), "relation": relation,
+        "request_id": rid,
+    }
+
+
+def _friendship_row(db, a, b):
+    return db.execute(
+        "SELECT * FROM friendships WHERE pair_key=?", (_friend_pair_key(a, b),)
+    ).fetchone()
+
+
+def friendship_status(me_id, other_id):
+    """返回 none / pending_out（我发出待对方同意）/ pending_in（对方发给我）/ accepted。"""
+    me_id, other_id = str(me_id), str(other_id)
+    if me_id == other_id:
+        return "self"
+    with connect() as db:
+        row = _friendship_row(db, me_id, other_id)
+    if not row:
+        return "none"
+    if row["status"] == "accepted":
+        return "accepted"
+    return "pending_out" if row["requester_id"] == me_id else "pending_in"
+
+
+def friend_id_set(me_id):
+    """已成为好友的对方 id 集合（共享权限校验用）。"""
+    with connect() as db:
+        rows = db.execute(
+            "SELECT requester_id,addressee_id FROM friendships WHERE status='accepted' "
+            "AND (requester_id=? OR addressee_id=?)",
+            (str(me_id), str(me_id)),
+        ).fetchall()
+    out = set()
+    for r in rows:
+        out.add(r["addressee_id"] if r["requester_id"] == str(me_id) else r["requester_id"])
+    return out
+
+
+def _resolve_friend_target(db, me_id, target):
+    target = str(target or "").strip()
+    if not target:
+        raise ValueError("请输入对方的用户名或邀请码。")
+    row = db.execute(
+        "SELECT * FROM users WHERE invite_code=? OR username_norm=? OR id=?",
+        (target.upper(), target.casefold(), target),
+    ).fetchone()
+    if not row:
+        raise ValueError("没有找到该用户，请核对用户名或邀请码。")
+    if row["id"] == str(me_id):
+        raise ValueError("不能添加自己为好友。")
+    return row
+
+
+def send_friend_request(me_id, target):
+    now = _now()
+    with connect() as db:
+        db.execute("BEGIN IMMEDIATE")
+        other = _resolve_friend_target(db, me_id, target)
+        existing = _friendship_row(db, me_id, other["id"])
+        if existing:
+            if existing["status"] == "accepted":
+                raise ValueError("你们已经是好友了。")
+            if existing["requester_id"] == str(me_id):
+                raise ValueError("已经发送过申请，等待对方同意。")
+            # 对方此前已向我发起申请：直接建立好友关系
+            db.execute(
+                "UPDATE friendships SET status='accepted',updated_at=? WHERE id=?",
+                (now, existing["id"]),
+            )
+            return {"ok": True, "accepted": True}
+        fid = str(uuid.uuid4())
+        db.execute(
+            "INSERT INTO friendships(id,requester_id,addressee_id,status,pair_key,created_at,updated_at) "
+            "VALUES(?,?,?,'pending',?,?,?)",
+            (fid, str(me_id), other["id"], _friend_pair_key(me_id, other["id"]), now, now),
+        )
+    return {"ok": True, "accepted": False}
+
+
+def respond_friend_request(me_id, request_id, action):
+    action = str(action or "").lower()
+    if action not in ("accept", "reject"):
+        raise ValueError("操作类型不合法。")
+    with connect() as db:
+        db.execute("BEGIN IMMEDIATE")
+        row = db.execute(
+            "SELECT * FROM friendships WHERE id=? AND addressee_id=? AND status='pending'",
+            (str(request_id), str(me_id)),
+        ).fetchone()
+        if not row:
+            raise KeyError("好友申请不存在或已处理。")
+        if action == "accept":
+            db.execute(
+                "UPDATE friendships SET status='accepted',updated_at=? WHERE id=?",
+                (_now(), request_id),
+            )
+        else:  # 拒绝：直接删除，便于以后重新发起
+            db.execute("DELETE FROM friendships WHERE id=?", (request_id,))
+    return {"ok": True}
+
+
+def cancel_friend_request(me_id, request_id):
+    with connect() as db:
+        cur = db.execute(
+            "DELETE FROM friendships WHERE id=? AND requester_id=? AND status='pending'",
+            (str(request_id), str(me_id)),
+        )
+        if cur.rowcount == 0:
+            raise KeyError("好友申请不存在。")
+    return {"ok": True}
+
+
+def remove_friend(me_id, friend_id):
+    with connect() as db:
+        cur = db.execute(
+            "DELETE FROM friendships WHERE pair_key=? AND status='accepted'",
+            (_friend_pair_key(me_id, friend_id),),
+        )
+        if cur.rowcount == 0:
+            raise KeyError("你们还不是好友。")
+    return {"ok": True}
+
+
+_FRIEND_JOIN_COLS = ("f.id AS request_id, u.id AS user_id, u.username, u.display_name, "
+                      "u.avatar, u.bio, u.invite_code, u.exp")
+
+
+def list_friends(me_id):
+    with connect() as db:
+        rows = db.execute(
+            "SELECT " + _FRIEND_JOIN_COLS + " FROM friendships f JOIN users u ON "
+            "(u.id=f.requester_id OR u.id=f.addressee_id) "
+            "WHERE (f.requester_id=? OR f.addressee_id=?) AND u.id<>? AND f.status='accepted' "
+            "ORDER BY u.display_name,u.username",
+            (str(me_id), str(me_id), str(me_id)),
+        ).fetchall()
+    return [_friend_card_join(r, me_id, "accepted") for r in rows]
+
+
+def list_friend_requests(me_id):
+    with connect() as db:
+        incoming = db.execute(
+            "SELECT " + _FRIEND_JOIN_COLS + " FROM friendships f JOIN users u ON u.id=f.requester_id "
+            "WHERE f.addressee_id=? AND f.status='pending' ORDER BY f.created_at DESC",
+            (str(me_id),),
+        ).fetchall()
+        outgoing = db.execute(
+            "SELECT " + _FRIEND_JOIN_COLS + " FROM friendships f JOIN users u ON u.id=f.addressee_id "
+            "WHERE f.requester_id=? AND f.status='pending' ORDER BY f.created_at DESC",
+            (str(me_id),),
+        ).fetchall()
+    return {
+        "incoming": [_friend_card_join(r, me_id, "pending_in") for r in incoming],
+        "outgoing": [_friend_card_join(r, me_id, "pending_out") for r in outgoing],
+    }
+
+
+def search_people(me_id, keyword, limit=10):
+    kw = ("%" + str(keyword or "").strip() + "%")
+    if kw == "%%":
+        return []
+    with connect() as db:
+        rows = db.execute(
+            "SELECT * FROM users WHERE id<>? AND "
+            "(username LIKE ? OR display_name LIKE ? OR invite_code=?) "
+            "ORDER BY display_name,username LIMIT ?",
+            (str(me_id), kw, kw, str(keyword or "").strip().upper(), limit),
+        ).fetchall()
+        result = []
+        for r in rows:
+            rel = "none"
+            fr = _friendship_row(db, me_id, r["id"])
+            if fr:
+                if fr["status"] == "accepted":
+                    rel = "accepted"
+                elif fr["requester_id"] == str(me_id):
+                    rel = "pending_out"
+                else:
+                    rel = "pending_in"
+            result.append(_friend_card_from_user(r, me_id, rel))
+    return result
 
 
 def record_event(user_id=None, device_id="", event_type="", page="", metadata=None, ip="", user_agent=""):

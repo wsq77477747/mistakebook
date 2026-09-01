@@ -571,6 +571,29 @@
 .community-compose,.community-post{background:#fff;border:1px solid var(--line);border-radius:15px;padding:16px;margin-bottom:14px}.community-compose textarea{width:100%;min-height:88px;resize:vertical;border:1px solid var(--line);border-radius:10px;padding:11px;font:inherit;outline:none}.community-compose textarea:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
 .community-compose-foot{display:flex;align-items:center;justify-content:space-between;margin-top:8px;color:var(--muted);font-size:12px}.community-author{display:flex;align-items:center;gap:10px;cursor:pointer}.community-author .avatar{width:38px;height:38px}.community-author b{display:block}.community-author small{color:var(--muted)}.community-content{white-space:pre-wrap;overflow-wrap:anywhere;margin:13px 0;line-height:1.7}.community-actions{display:flex;gap:8px;border-top:1px solid #f0f2f6;padding-top:10px}.community-actions button{border:0;background:#f7f8fb;color:#526074;border-radius:8px;padding:7px 11px;cursor:pointer}.community-actions button.active{background:#fee2e2;color:#dc2626}.community-comments{margin-top:10px}.community-comment{display:flex;gap:8px;background:#f8fafc;border-radius:9px;padding:8px 10px;margin-top:7px;font-size:13px}.community-comment b{cursor:pointer}.community-comment-form{display:flex;gap:8px;margin-top:9px}.community-comment-form input{flex:1;border:1px solid var(--line);border-radius:8px;padding:8px 10px}.community-empty{text-align:center;color:var(--muted);padding:42px 15px}
 .account-list{display:grid;gap:9px;margin:12px 0}.account-choice{width:100%;display:flex;align-items:center;gap:10px;text-align:left;background:#f8fafc;border:1px solid var(--line);border-radius:11px;padding:10px;cursor:pointer}.account-choice:hover,.account-choice.selected{border-color:var(--brand);background:var(--brand-soft)}.account-choice .avatar{width:38px;height:38px}.auth-link-row{display:flex;justify-content:space-between;gap:12px;margin-top:10px;font-size:12.5px}.auth-link-row a{color:var(--brand);text-decoration:none}.public-profile-head{display:flex;gap:14px;align-items:center}.public-profile-head .avatar{width:64px;height:64px}.public-profile-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:15px 0}.public-profile-stats div{text-align:center;background:#f8fafc;border-radius:10px;padding:9px}.public-profile-stats strong{display:block;font-size:20px;color:var(--brand)}
+.friend-badge{background:#ef4444;color:#fff;border-radius:10px;font-size:11px;padding:1px 7px;margin-left:6px;font-weight:700;vertical-align:middle}
+.friend-preview{display:flex;flex-wrap:wrap;gap:8px;margin-top:11px}
+.friend-preview .fp-item{display:flex;align-items:center;gap:6px;background:#f8fafc;border:1px solid var(--line);border-radius:20px;padding:3px 11px 3px 4px;font-size:12.5px;color:#334155}
+.friend-preview .fp-item img{width:24px;height:24px;border-radius:50%}
+.friends-modal{width:min(580px,94vw);max-height:86vh;overflow-y:auto}
+.friend-searchbar{display:flex;gap:8px;margin:13px 0 4px}
+.friend-searchbar input{flex:1;min-width:0;padding:9px 12px;border:1px solid var(--line);border-radius:9px;font-size:13.5px;box-sizing:border-box}
+.friend-searchbar input:focus{border-color:var(--brand);outline:none}
+.friend-group-title{font-size:13.5px;color:#334155;margin:15px 0 7px;font-weight:700}
+.friend-mini-count{color:#94a3b8;font-weight:500;font-size:12px}
+.friend-list{display:grid;gap:8px}
+.friend-row{display:flex;align-items:center;gap:10px;background:#f8fafc;border:1px solid var(--line);border-radius:11px;padding:8px 11px}
+.friend-row img{width:40px;height:40px;border-radius:50%;flex-shrink:0;object-fit:cover}
+.fr-info{flex:1;min-width:0}
+.fr-name{display:flex;align-items:center;gap:7px;font-weight:700;font-size:14px;color:#0f172a;flex-wrap:wrap}
+.fr-sub{font-size:12px;color:#94a3b8;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fr-actions{display:flex;gap:6px;flex-shrink:0}
+.fr-actions button{padding:6px 11px;font-size:12.5px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;color:#334155}
+.fr-actions button.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
+.fr-actions button:disabled{opacity:.55;cursor:default}
+.friend-empty{font-size:12.5px;color:#94a3b8;padding:3px 2px}
+.pp-friend-btn{margin-left:auto;padding:7px 14px;border-radius:9px;border:none;background:var(--brand);color:#fff;font-size:13px;font-weight:600;cursor:pointer}
+.pp-friend-btn.muted{background:#e2e8f0;color:#475569;cursor:default}
 .lv-tag{display:inline-flex;align-items:center;font-size:11px;font-weight:700;color:#fff;padding:1px 8px;border-radius:20px;line-height:1.6;white-space:nowrap;text-shadow:0 1px 1px rgba(0,0,0,.18)}
 .lv-tag.mini{font-size:10px;padding:0 6px;line-height:1.5;font-weight:600}
 .ca-name{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
@@ -813,6 +836,14 @@
       <button class="btn-plain" id="my-ai-clear">恢复使用站点默认</button>
     </div>
     <div class="import-state" id="my-ai-state"></div>
+  </div>
+  <div class="me-section">
+    <h3>👥 我的好友<span class="friend-badge" id="me-friend-badge" hidden>0</span></h3>
+    <p class="meta">搜索用户名或邀请码添加好友；成为好友后可以把错题本共享给对方，一起查看或协作编辑。</p>
+    <div class="import-actions">
+      <button class="btn-plain" id="me-friends-btn">🤝 管理好友与申请</button>
+    </div>
+    <div id="me-friends-preview" class="friend-preview"></div>
   </div>
   <div class="me-section">
     <h3>🎁 邀请好友</h3>
@@ -1096,6 +1127,28 @@
   <div class="modal"><div id="public-profile-body"></div><div class="mrow"><button class="btn-plain" id="public-profile-close">关闭</button></div></div>
 </div>
 
+<div class="modal-mask" id="friends-modal" hidden>
+  <div class="modal friends-modal">
+    <div class="mrow" style="justify-content:space-between">
+      <h3 style="margin:0">👥 好友</h3>
+      <button class="btn-plain" id="friends-close">关闭</button>
+    </div>
+    <div class="friend-searchbar">
+      <input id="friend-search-input" placeholder="用户名 / 昵称 / 邀请码，回车搜索" maxlength="40">
+      <button class="btn-primary" id="friend-search-btn">搜索</button>
+      <button class="btn-plain" id="friend-direct-add" title="按用户名或邀请码直接发送申请">＋申请</button>
+    </div>
+    <div id="friend-search-results" class="friend-list"></div>
+    <h4 class="friend-group-title" id="friend-incoming-title" hidden>📨 收到的申请</h4>
+    <div id="friend-incoming" class="friend-list"></div>
+    <h4 class="friend-group-title" id="friend-outgoing-title" hidden>⏳ 我发出的申请</h4>
+    <div id="friend-outgoing" class="friend-list"></div>
+    <h4 class="friend-group-title">🤝 我的好友<span class="friend-mini-count" id="friend-count"></span></h4>
+    <div id="friend-list" class="friend-list"></div>
+    <div class="import-state" id="friend-state"></div>
+  </div>
+</div>
+
 <script>
 window.__QUIZ_DATA__ = [];
 
@@ -1216,6 +1269,7 @@ function handleLevelResult(r){
 /* ================= 账号、数据库与同步 ================= */
 let currentUser=null,todayQueue=[],todayStats={due:0,reviewed_today:0},activeCategory='全部';
 let notebooks=[],currentNotebookId='all';
+let friends=[],friendRequests={incoming:[],outgoing:[]};
 const NB_PALETTE=["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#14b8a6","#f97316"];
 function currentData(){const D=window.__QUIZ_DATA__||[];return currentNotebookId==='all'?D:D.filter(q=>q.notebook_id===currentNotebookId);}
 function nbCount(id){return (window.__QUIZ_DATA__||[]).filter(q=>q.notebook_id===id).length;}
@@ -1308,7 +1362,7 @@ async function enterAccount(user, levelResult){
   paintAllAvatars(user);
   document.getElementById('ai-settings-btn').hidden=!user.is_admin;
   if(user.is_admin){document.getElementById('tab-analytics-btn').hidden=false;}
-  await loadNotebooks();await loadQuestions();await loadToday();refreshCurrentModel();
+  await loadNotebooks();await loadFriends(true);await loadQuestions();await loadToday();refreshCurrentModel();
   loadLevel().then(()=>{ if(levelResult)handleLevelResult(levelResult); });
 }
 const EMAIL_RE=/^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
@@ -1548,7 +1602,7 @@ document.querySelectorAll('.modal-mask').forEach(function(mask){
 });
 document.getElementById('header-login-btn').addEventListener('click',()=>showAuth());
 document.getElementById('logout-btn').addEventListener('click',async()=>{
-  await fetch('/api/auth/logout',{method:'POST'});currentUser=null;window.__QUIZ_DATA__=[];notebooks=[];currentNotebookId='all';
+  await fetch('/api/auth/logout',{method:'POST'});currentUser=null;window.__QUIZ_DATA__=[];notebooks=[];currentNotebookId='all';friends=[];friendRequests={incoming:[],outgoing:[]};
   document.getElementById('user-area').hidden=true;document.getElementById('header-login-btn').hidden=false;document.getElementById('tab-analytics-btn').hidden=true;
   renderLibrary();switchTab('community');document.getElementById('header-stats').textContent='已安全退出 · 可继续浏览讨论室';
 });
@@ -1773,12 +1827,143 @@ document.getElementById('community-list').addEventListener('click',async e=>{
     }
   }catch(err){if(err.name!=='AbortError'&&err.message!=='AUTH_REQUIRED')alert(err.message);}
 });
+/* ================= 好友 ================= */
+function friendRowHtml(u, mode){
+  const actions={
+    incoming:'<button class="primary" data-fact="respond" data-act="accept" data-id="'+esc(u.request_id)+'">接受</button><button data-fact="respond" data-act="reject" data-id="'+esc(u.request_id)+'">拒绝</button>',
+    outgoing:'<button data-fact="cancel" data-id="'+esc(u.request_id)+'">撤销</button>',
+    friends:'<button data-fact="remove" data-uid="'+esc(u.id)+'">删除</button>',
+    search: u.relation==='accepted'?'<button disabled>已是好友</button>'
+      : u.relation==='pending_out'?'<button disabled>等待验证</button>'
+      : u.relation==='pending_in'?'<button class="primary" data-fact="accept-user" data-uid="'+esc(u.id)+'">接受申请</button>'
+      : '<button class="primary" data-fact="add" data-target="'+esc(u.username)+'">＋加好友</button>'
+  }[mode]||'';
+  return '<div class="friend-row">'+communityAvatar(u)+
+    '<div class="fr-info"><div class="fr-name">'+esc(communityUserName(u))+lvBadge(u,true)+'</div>'+
+    '<div class="fr-sub">@'+esc(u.username)+(u.bio?' · '+esc(u.bio):'')+'</div></div>'+
+    '<div class="fr-actions">'+actions+'</div></div>';
+}
+async function loadFriends(silent){
+  try{
+    const j=await apiJson('/api/friends');
+    friends=j.friends||[];friendRequests=j.requests||{incoming:[],outgoing:[]};
+  }catch(e){if(!silent)throw e;friends=[];friendRequests={incoming:[],outgoing:[]};}
+  renderFriendBadgeAndPreview();
+  const m=document.getElementById('friends-modal');
+  if(m&&!m.hidden)renderFriendsModal();
+}
+function renderFriendBadgeAndPreview(){
+  const badge=document.getElementById('me-friend-badge');
+  const n=(friendRequests.incoming||[]).length;
+  if(badge){if(n>0){badge.hidden=false;badge.textContent=n;}else badge.hidden=true;}
+  const pv=document.getElementById('me-friends-preview');
+  if(pv){pv.innerHTML=friends.length
+    ? friends.slice(0,14).map(u=>'<span class="fp-item">'+communityAvatar(u)+esc(communityUserName(u))+'</span>').join('')
+    : '<span class="friend-empty">还没有好友，去搜索用户名或邀请码添加吧。</span>';}
+}
+function renderFriendsModal(){
+  const inc=friendRequests.incoming||[],out=friendRequests.outgoing||[];
+  document.getElementById('friend-incoming-title').hidden=!inc.length;
+  document.getElementById('friend-outgoing-title').hidden=!out.length;
+  document.getElementById('friend-incoming').innerHTML=inc.map(u=>friendRowHtml(u,'incoming')).join('');
+  document.getElementById('friend-outgoing').innerHTML=out.map(u=>friendRowHtml(u,'outgoing')).join('');
+  document.getElementById('friend-count').textContent='（'+friends.length+'）';
+  document.getElementById('friend-list').innerHTML=friends.length
+    ? friends.map(u=>friendRowHtml(u,'friends')).join('') : '<div class="friend-empty">还没有好友。</div>';
+}
+async function openFriendsModal(){
+  document.getElementById('friend-search-results').innerHTML='';
+  document.getElementById('friend-search-input').value='';
+  document.getElementById('friend-state').textContent='';
+  document.getElementById('friends-modal').hidden=false;
+  await loadFriends();
+}
+async function friendPost(url,body){
+  const j=await apiJson(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
+  if(j.friends){friends=j.friends;friendRequests=j.requests||{incoming:[],outgoing:[]};
+    renderFriendBadgeAndPreview();renderFriendsModal();}
+  return j;
+}
+function friendStateMsg(t){const el=document.getElementById('friend-state');if(el)el.textContent=t||'';}
+async function doFriendSearch(){
+  const q=document.getElementById('friend-search-input').value.trim();
+  const box=document.getElementById('friend-search-results');
+  if(!q){box.innerHTML='';return;}
+  try{
+    const j=await apiJson('/api/friends/search?q='+encodeURIComponent(q));
+    const rs=j.results||[];
+    box.innerHTML=rs.length?rs.map(u=>friendRowHtml(u,'search')).join(''):'<div class="friend-empty">没有找到匹配的用户。</div>';
+  }catch(e){box.innerHTML='<div class="friend-empty">搜索失败：'+esc(e.message)+'</div>';}
+}
+async function directFriendAdd(){
+  const q=document.getElementById('friend-search-input').value.trim();
+  if(!q)return;
+  try{
+    const j=await friendPost('/api/friends/request',{target:q});
+    friendStateMsg(j.accepted?'✅ 已成为好友。':'✅ 申请已发送，等待对方同意。');
+    document.getElementById('friend-search-results').innerHTML='';
+  }catch(e){friendStateMsg('❌ '+e.message);}
+}
+document.getElementById('me-friends-btn').addEventListener('click',openFriendsModal);
+document.getElementById('friends-close').addEventListener('click',()=>{document.getElementById('friends-modal').hidden=true;});
+document.getElementById('friends-modal').addEventListener('click',e=>{if(e.target.id==='friends-modal')e.target.hidden=true;});
+document.getElementById('friend-search-btn').addEventListener('click',doFriendSearch);
+document.getElementById('friend-search-input').addEventListener('keydown',e=>{if(e.key==='Enter')doFriendSearch();});
+document.getElementById('friend-direct-add').addEventListener('click',directFriendAdd);
+document.getElementById('friend-list').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-fact]');if(!b)return;
+  if(b.dataset.fact==='remove'){
+    if(!confirm('确定删除该好友吗？共享关系也会随之解除。'))return;
+    try{await friendPost('/api/friends/remove',{friend_id:b.dataset.uid});friendStateMsg('✅ 已删除好友。');}
+    catch(err){friendStateMsg('❌ '+err.message);}
+  }
+});
+document.getElementById('friend-incoming').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-fact]');if(!b)return;
+  try{await friendPost('/api/friends/respond',{request_id:b.dataset.id,action:b.dataset.act});friendStateMsg('✅ 已处理申请。');}
+  catch(err){friendStateMsg('❌ '+err.message);}
+});
+document.getElementById('friend-outgoing').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-fact]');if(!b)return;
+  try{await friendPost('/api/friends/cancel',{request_id:b.dataset.id});friendStateMsg('已撤销申请。');}
+  catch(err){friendStateMsg('❌ '+err.message);}
+});
+document.getElementById('friend-search-results').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-fact]');if(!b)return;
+  try{
+    if(b.dataset.fact==='add'){await friendPost('/api/friends/request',{target:b.dataset.target});friendStateMsg('✅ 申请已发送。');doFriendSearch();}
+    if(b.dataset.fact==='accept-user'){
+      const r=(friendRequests.incoming||[]).find(x=>x.id===b.dataset.uid);
+      if(r){await friendPost('/api/friends/respond',{request_id:r.request_id,action:'accept'});doFriendSearch();}
+    }
+  }catch(err){friendStateMsg('❌ '+err.message);}
+});
+function pfFriendBtn(u,rel){
+  if(currentUser&&currentUser.id===u.id)return '';
+  if(rel==='accepted')return '<button class="pp-friend-btn muted" disabled>已是好友</button>';
+  if(rel==='pending_out')return '<button class="pp-friend-btn muted" disabled>等待验证</button>';
+  if(rel==='pending_in')return '<button class="pp-friend-btn" data-pf="accept" data-uid="'+esc(u.id)+'">接受申请</button>';
+  return '<button class="pp-friend-btn" data-pf="add" data-target="'+esc(u.username)+'">＋加好友</button>';
+}
+document.getElementById('public-profile-body').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-pf]');if(!b||!currentUser)return;
+  try{
+    if(b.dataset.pf==='add'){await apiJson('/api/friends/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target:b.dataset.target})});alert('好友申请已发送。');}
+    if(b.dataset.pf==='accept'){
+      const j=await apiJson('/api/friends');
+      const r=(j.requests.incoming||[]).find(x=>x.id===b.dataset.uid);
+      if(r)await apiJson('/api/friends/respond',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:r.request_id,action:'accept'})});
+      alert('已成为好友。');
+    }
+    document.getElementById('public-profile-modal').hidden=true;loadFriends(true);
+  }catch(err){alert(err.message);}
+});
 async function openCommunityProfile(userId){
   try{
     const r=await fetch('/api/community/profile?id='+encodeURIComponent(userId)),j=await r.json();if(!r.ok)throw new Error(j.message||'读取失败');
     const p=j.profile,u=p.user;
     const ppPosts=(p.posts||[]).map(q=>'<div class="pp-post">'+esc(q.content)+'<span class="pp-time">'+esc(communityTime(q.created_at))+' · ♥ '+q.like_count+' · 💬 '+q.comment_count+'</span></div>').join('');
-    document.getElementById('public-profile-body').innerHTML='<div class="public-profile-head">'+communityAvatar(u)+'<div style="flex:1"><div class="ca-name"><h3 style="margin:0">'+esc(communityUserName(u))+'</h3>'+lvBadge(u)+'</div><div class="meta">@'+esc(u.username)+'</div></div></div><p>'+esc(u.bio||'这个用户还没有填写简介。')+'</p><div class="public-profile-stats"><div><strong>'+p.post_count+'</strong>帖子</div><div><strong>'+p.comment_count+'</strong>评论</div><div><strong>'+p.received_likes+'</strong>获赞</div></div><h4 style="margin:4px 0 8px;font-size:14px;color:#1e293b">TA 的发帖</h4>'+(ppPosts?'<div class="pp-posts">'+ppPosts+'</div>':'<div class="meta">还没有发布过帖子。</div>');
+    document.getElementById('public-profile-body').innerHTML='<div class="public-profile-head">'+communityAvatar(u)+'<div style="flex:1"><div class="ca-name"><h3 style="margin:0">'+esc(communityUserName(u))+'</h3>'+lvBadge(u)+'</div><div class="meta">@'+esc(u.username)+'</div></div>'+pfFriendBtn(u,p.relation)+'</div><p>'+esc(u.bio||'这个用户还没有填写简介。')+'</p><div class="public-profile-stats"><div><strong>'+p.post_count+'</strong>帖子</div><div><strong>'+p.comment_count+'</strong>评论</div><div><strong>'+p.received_likes+'</strong>获赞</div></div><h4 style="margin:4px 0 8px;font-size:14px;color:#1e293b">TA 的发帖</h4>'+(ppPosts?'<div class="pp-posts">'+ppPosts+'</div>':'<div class="meta">还没有发布过帖子。</div>');
     document.getElementById('public-profile-modal').hidden=false;
   }catch(e){alert(e.message);}
 }
@@ -1799,6 +1984,7 @@ function switchTab(name){
 function renderMe(){
   if(!currentUser)return;
   const D=window.__QUIZ_DATA__;
+  renderFriendBadgeAndPreview();
   paintAllAvatars(currentUser);
   document.getElementById('me-username').textContent=currentUser.display_name||currentUser.username;
   document.getElementById('me-account').textContent=currentUser.username;

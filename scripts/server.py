@@ -533,6 +533,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._send_json(200, self._my_ai_config_view())
         if path == "/api/notebooks":
             return self._send_json(200, {"notebooks": storage.list_notebooks(self.user["id"])})
+        if path == "/api/friends":
+            return self._send_json(200, {
+                "friends": storage.list_friends(self.user["id"]),
+                "requests": storage.list_friend_requests(self.user["id"])})
+        if path == "/api/friends/search":
+            q = parse_qs(urlparse(self.path).query).get("q", [""])[0]
+            return self._send_json(200, {"results": storage.search_people(self.user["id"], q)})
         if path == "/api/profile":
             return self._send_json(200, {"profile": storage.get_profile(self.user["id"])})
         if path == "/api/level":
@@ -593,6 +600,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._nb_delete()
         if path == "/api/notebooks/move":
             return self._nb_move()
+        if path == "/api/friends/request":
+            return self._friend_request()
+        if path == "/api/friends/respond":
+            return self._friend_respond()
+        if path == "/api/friends/cancel":
+            return self._friend_cancel()
+        if path == "/api/friends/remove":
+            return self._friend_remove()
         if path == "/api/community/posts":
             return self._community_create_post()
         if path == "/api/community/comments":
@@ -978,6 +993,46 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         moved = storage.move_questions(
             self.user["id"], body.get("question_ids") or [], body.get("target_notebook_id"))
         return self._send_json(200, {"ok": True, "moved": moved})
+
+    # ---- 好友 ----
+    def _friend_view(self):
+        return {"friends": storage.list_friends(self.user["id"]),
+                "requests": storage.list_friend_requests(self.user["id"])}
+
+    def _friend_request(self):
+        body = self._read_body()
+        try:
+            r = storage.send_friend_request(self.user["id"], body.get("target"))
+        except ValueError as exc:
+            return self._send_json(400, {"error": "FRIEND_FAIL", "message": str(exc)})
+        self._track_event("friend_request")
+        return self._send_json(200, dict({"ok": True}, **r, **self._friend_view()))
+
+    def _friend_respond(self):
+        body = self._read_body()
+        try:
+            storage.respond_friend_request(self.user["id"], body.get("request_id"), body.get("action"))
+        except KeyError:
+            return self._send_json(404, {"error": "NOT_FOUND", "message": "好友申请不存在或已处理。"})
+        except ValueError as exc:
+            return self._send_json(400, {"error": "FRIEND_FAIL", "message": str(exc)})
+        return self._send_json(200, dict({"ok": True}, **self._friend_view()))
+
+    def _friend_cancel(self):
+        body = self._read_body()
+        try:
+            storage.cancel_friend_request(self.user["id"], body.get("request_id"))
+        except KeyError:
+            return self._send_json(404, {"error": "NOT_FOUND", "message": "好友申请不存在。"})
+        return self._send_json(200, dict({"ok": True}, **self._friend_view()))
+
+    def _friend_remove(self):
+        body = self._read_body()
+        try:
+            storage.remove_friend(self.user["id"], body.get("friend_id"))
+        except KeyError:
+            return self._send_json(404, {"error": "NOT_FOUND", "message": "你们还不是好友。"})
+        return self._send_json(200, dict({"ok": True}, **self._friend_view()))
 
     def _grant(self, action):
         """动作发放经验，失败不影响主流程；返回结果或 None。"""
