@@ -113,6 +113,85 @@ class StorageTests(unittest.TestCase):
         self.assertIsNotNone(authenticated)
         self.assertEqual(authenticated["email"], "")
 
+    def test_pre_notebook_questions_schema_upgrades_before_index_creation(self):
+        legacy_db = os.path.join(self.tmp.name, "pre-notebook.db")
+        storage.DB_PATH = legacy_db
+        db = sqlite3.connect(legacy_db)
+        try:
+            db.execute(
+                "CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT NOT NULL, "
+                "username_norm TEXT NOT NULL UNIQUE, password_salt TEXT NOT NULL, "
+                "password_hash TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0, "
+                "created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
+            )
+            db.execute(
+                "INSERT INTO users VALUES(?,?,?,?,?,?,?,?)",
+                ("legacy-user", "legacy", "legacy", "00" * 16, "unused", 1,
+                 "2026-08-30T00:00:00Z", "2026-08-30T00:00:00Z"),
+            )
+            db.execute(
+                """CREATE TABLE questions (
+                  id TEXT PRIMARY KEY,
+                  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                  source_file TEXT,
+                  no TEXT NOT NULL DEFAULT '',
+                  title TEXT NOT NULL DEFAULT '',
+                  cat TEXT NOT NULL DEFAULT '未分类',
+                  diff TEXT NOT NULL DEFAULT '简单',
+                  first_wrong_date TEXT NOT NULL,
+                  source TEXT NOT NULL DEFAULT '',
+                  error_type TEXT NOT NULL DEFAULT '其他',
+                  status TEXT NOT NULL DEFAULT '未掌握',
+                  wrong_times INTEGER NOT NULL DEFAULT 1,
+                  rewrong_dates TEXT NOT NULL DEFAULT '[]',
+                  summary TEXT NOT NULL DEFAULT '',
+                  body_md TEXT NOT NULL DEFAULT '',
+                  search_text TEXT NOT NULL DEFAULT '',
+                  ease REAL NOT NULL DEFAULT 2.5,
+                  interval_days INTEGER NOT NULL DEFAULT 0,
+                  repetitions INTEGER NOT NULL DEFAULT 0,
+                  lapses INTEGER NOT NULL DEFAULT 0,
+                  next_review_at TEXT NOT NULL,
+                  last_review_at TEXT,
+                  version INTEGER NOT NULL DEFAULT 1,
+                  created_at TEXT NOT NULL,
+                  updated_at TEXT NOT NULL,
+                  deleted_at TEXT
+                )"""
+            )
+            db.execute(
+                """INSERT INTO questions (
+                  id,user_id,title,first_wrong_date,next_review_at,created_at,updated_at
+                ) VALUES(?,?,?,?,?,?,?)""",
+                ("legacy-question", "legacy-user", "legacy SQL question", "2026-08-30",
+                 "2026-08-30T00:00:00Z", "2026-08-30T00:00:00Z",
+                 "2026-08-30T00:00:00Z"),
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        storage.init_db()
+
+        db = sqlite3.connect(legacy_db)
+        try:
+            columns = {row[1] for row in db.execute("PRAGMA table_info(questions)")}
+            self.assertIn("subject", columns)
+            self.assertIn("notebook_id", columns)
+            subject, notebook_id = db.execute(
+                "SELECT subject,notebook_id FROM questions WHERE id='legacy-question'"
+            ).fetchone()
+            self.assertEqual(subject, "SQL")
+            self.assertTrue(notebook_id)
+            self.assertIsNotNone(
+                db.execute(
+                    "SELECT name FROM sqlite_master "
+                    "WHERE type='index' AND name='idx_questions_user_nb'"
+                ).fetchone()
+            )
+        finally:
+            db.close()
+
     def test_email_code_create_verify_and_expiry(self):
         email = "coder@example.com"
         code, expires = storage.create_email_code(email)

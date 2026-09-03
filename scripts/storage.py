@@ -329,8 +329,6 @@ def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_notebooks_user
               ON notebooks(user_id, archived_at, sort_order);
-            CREATE INDEX IF NOT EXISTS idx_questions_user_nb
-              ON questions(user_id, notebook_id, deleted_at);
             CREATE TABLE IF NOT EXISTS daily_progress (
               user_id TEXT NOT NULL,
               date TEXT NOT NULL,
@@ -412,6 +410,11 @@ def init_db():
             db.execute("ALTER TABLE questions ADD COLUMN subject TEXT NOT NULL DEFAULT 'SQL'")
         if "notebook_id" not in question_columns:
             db.execute("ALTER TABLE questions ADD COLUMN notebook_id TEXT")
+        # 旧版本 questions 表没有 notebook_id；必须先补列，再创建索引。
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_questions_user_nb "
+            "ON questions(user_id, notebook_id, deleted_at)"
+        )
         for (uid,) in db.execute("SELECT id FROM users").fetchall():
             _nb_id, _ = _ensure_default_notebook(db, uid)
             db.execute(
